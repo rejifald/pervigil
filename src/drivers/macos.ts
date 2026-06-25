@@ -86,6 +86,11 @@ export class MacOSDriver implements Driver {
     return this._restarts;
   }
 
+  /** A caffeinate child is alive ⇒ the assertion is in effect. */
+  get held(): boolean {
+    return this._child !== null;
+  }
+
   onPrimitiveDied(cb: () => void): void {
     this._diedCallbacks.push(cb);
   }

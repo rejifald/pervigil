@@ -119,6 +119,16 @@ export class LinuxDriver implements Driver {
     return this._restarts;
   }
 
+  /**
+   * The assertion is in effect when the systemd-inhibit child is alive, or the
+   * sysfs wake_lock cookie is written. The no-op backend never holds.
+   */
+  get held(): boolean {
+    if (this.backend === "systemd-inhibit") return this.child !== null;
+    if (this.backend === "sysfs") return this.sysfsEngaged;
+    return false;
+  }
+
   onPrimitiveDied(cb: () => void): void {
     this.diedCallbacks.push(cb);
   }

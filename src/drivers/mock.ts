@@ -33,6 +33,7 @@ export class MockDriver implements Driver {
 
   private _engageTransitions = 0;
   private _restarts = 0;
+  private _held = false;
   private readonly _diedCallbacks: (() => void)[] = [];
   private lastState: WakeLockState = { system: false, display: false };
 
@@ -45,18 +46,29 @@ export class MockDriver implements Driver {
     return this._restarts;
   }
 
+  /**
+   * Whether a (simulated) assertion is in effect. True after a `setState` that
+   * engages an axis; false after all-off, `shutdown()`, or
+   * {@link simulatePrimitiveDeath} — mirroring a real driver whose primitive
+   * dropped and has not yet re-engaged.
+   */
+  get held(): boolean {
+    return this._held;
+  }
+
   onPrimitiveDied(cb: () => void): void {
     this._diedCallbacks.push(cb);
   }
 
   /**
    * Test helper: simulate the OS primitive dying unexpectedly. Bumps
-   * `restarts` and invokes every callback registered via
-   * {@link onPrimitiveDied}, mirroring what the real drivers do on an
-   * unexpected child exit.
+   * `restarts`, drops the held assertion, and invokes every callback
+   * registered via {@link onPrimitiveDied}, mirroring what the real drivers do
+   * on an unexpected child exit.
    */
   simulatePrimitiveDeath(): void {
     this._restarts += 1;
+    this._held = false;
     for (const cb of this._diedCallbacks) cb();
   }
 
@@ -76,6 +88,7 @@ export class MockDriver implements Driver {
       this.disengageCalls.push(Date.now());
     }
 
+    this._held = isEngaged;
     this.lastState = state;
   }
 
@@ -84,6 +97,7 @@ export class MockDriver implements Driver {
     if (this.lastState.system || this.lastState.display) {
       this.disengageCalls.push(Date.now());
     }
+    this._held = false;
     this.lastState = { system: false, display: false };
   }
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { wakeLock } from "./controller.js";
+import { WakeLockUnavailableError } from "./errors.js";
 import { MockDriver } from "./drivers/mock.js";
 import { NoopDriver } from "./drivers/noop.js";
 import type { DegradedReason, Driver, WakeLockState } from "./types.js";
@@ -290,6 +291,96 @@ describe("wakeLock", () => {
       await expect(wl.acquire("job", { system: true })).resolves.toBeUndefined();
       expect(wl.status().engaged.system).toBe(true);
       expect(seen).toEqual(["engaged"]);
+    });
+  });
+
+  describe("status().active", () => {
+    it("is false before anything is acquired", () => {
+      expect(wakeLock({ driver }).status().active).toBe(false);
+    });
+
+    it("is true while a reason is held on an available driver", async () => {
+      const wl = wakeLock({ driver });
+      await wl.acquire("job", { system: true });
+      expect(wl.status().active).toBe(true);
+    });
+
+    it("is false on a degraded driver even though a reason is engaged (intent ≠ reality)", async () => {
+      const wl = wakeLock({ driver: new NoopDriver("container") });
+      await wl.acquire("job", { system: true });
+      expect(wl.status().engaged.system).toBe(true); // intent
+      expect(wl.status().available).toBe(false);
+      expect(wl.status().active).toBe(false); // reality
+    });
+
+    it("goes false when the primitive dies, then true again after re-engage", async () => {
+      const wl = wakeLock({ driver });
+      await wl.acquire("job", { system: true });
+      expect(wl.status().active).toBe(true);
+
+      driver.simulatePrimitiveDeath();
+      expect(wl.status().active).toBe(false); // dropped, not yet re-engaged
+      expect(wl.status().engaged.system).toBe(true); // still desired
+
+      await wl.acquire("job2", { system: true }); // next change re-engages
+      expect(wl.status().active).toBe(true);
+    });
+
+    it("falls back to available && engaged for a driver that does not report `held`", async () => {
+      const bare: Driver = {
+        platform: "bare",
+        available: true,
+        degradedReason: null,
+        setState: async () => undefined,
+        shutdown: async () => undefined,
+      };
+      const wl = wakeLock({ driver: bare });
+      expect(wl.status().active).toBe(false);
+      await wl.acquire("a", { system: true });
+      expect(wl.status().active).toBe(true);
+    });
+  });
+
+  describe("strict mode", () => {
+    it("acquire rejects with WakeLockUnavailableError on a degraded driver", async () => {
+      const wl = wakeLock({ driver: new NoopDriver("container"), strict: true });
+      await expect(wl.acquire("job", { system: true })).rejects.toBeInstanceOf(
+        WakeLockUnavailableError,
+      );
+    });
+
+    it("the rejection carries degradedReason and platform", async () => {
+      const wl = wakeLock({ driver: new NoopDriver("container"), strict: true });
+      const err = await wl.acquire("job", { system: true }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(WakeLockUnavailableError);
+      expect((err as WakeLockUnavailableError).degradedReason).toBe("container");
+      expect((err as WakeLockUnavailableError).platform).toBe("noop");
+    });
+
+    it("does not record the hold when it rejects", async () => {
+      const wl = wakeLock({ driver: new NoopDriver("container"), strict: true });
+      await wl.acquire("job", { system: true }).catch(() => undefined);
+      expect(wl.status().engaged.system).toBe(false);
+      expect(wl.status().reasons.system).toHaveLength(0);
+    });
+
+    it("acquire succeeds normally when the driver is available", async () => {
+      const wl = wakeLock({ driver, strict: true });
+      await expect(wl.acquire("job", { system: true })).resolves.toBeUndefined();
+      expect(wl.status().active).toBe(true);
+    });
+
+    it("a later op still runs after a strict rejection (queue not broken)", async () => {
+      const wl = wakeLock({ driver: new NoopDriver("container"), strict: true });
+      await wl.acquire("bad", { system: true }).catch(() => undefined);
+      // The controller stays usable; release of an unknown key is a clean no-op.
+      await expect(wl.release("bad")).resolves.toBeUndefined();
+    });
+
+    it("non-strict acquire on a degraded driver resolves (no throw) and is inactive", async () => {
+      const wl = wakeLock({ driver: new NoopDriver("container") });
+      await expect(wl.acquire("job", { system: true })).resolves.toBeUndefined();
+      expect(wl.status().active).toBe(false);
     });
   });
 });

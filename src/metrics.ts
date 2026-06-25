@@ -50,8 +50,9 @@ export type MetricSource = { status(): WakeLockStatus } | WakeLockStatus;
 
 /** Static help text per metric name, used by {@link toPrometheus}. */
 const HELP: Record<string, string> = {
-  pervigil_available: "Whether a real OS wake-lock primitive is active (1) or degraded to no-op (0).",
-  pervigil_awake: "Whether the given axis is currently engaged (1) or idle (0).",
+  pervigil_available: "Whether the driver is capable of a real OS wake-lock primitive (1) or degraded to a no-op (0).",
+  pervigil_active: "Whether the host is actually being kept awake right now — a real OS assertion is in effect (1) or not (0).",
+  pervigil_awake: "Whether the given axis currently has a reason desired (1) or idle (0).",
   pervigil_awake_ms_total: "Total wall-clock milliseconds the given axis has been held.",
   pervigil_engage_transitions_total: "Count of idle→engaged edges (real activations) for the given axis.",
   pervigil_primitive_restarts_total:
@@ -72,10 +73,10 @@ function toStatus(source: MetricSource): WakeLockStatus {
 /**
  * Collect the wake-lock counters as a neutral list of {@link MetricSample}s.
  *
- * Emits, in order: `pervigil_available` (gauge), `pervigil_awake{axis}` (gauge,
- * per axis), `pervigil_awake_ms_total{axis}` (counter, per axis),
- * `pervigil_engage_transitions_total{axis}` (counter, per axis), and
- * `pervigil_primitive_restarts_total` (counter).
+ * Emits, in order: `pervigil_available` (gauge), `pervigil_active` (gauge),
+ * `pervigil_awake{axis}` (gauge, per axis), `pervigil_awake_ms_total{axis}`
+ * (counter, per axis), `pervigil_engage_transitions_total{axis}` (counter, per
+ * axis), and `pervigil_primitive_restarts_total` (counter).
  *
  * @param source A lock-like object exposing `status()`, or a captured
  *   {@link WakeLockStatus} snapshot.
@@ -84,6 +85,7 @@ export function collectMetrics(source: MetricSource): MetricSample[] {
   const s = toStatus(source);
   const samples: MetricSample[] = [
     { name: "pervigil_available", value: s.available ? 1 : 0, type: "gauge" },
+    { name: "pervigil_active", value: s.active ? 1 : 0, type: "gauge" },
   ];
 
   for (const axis of AXES) {

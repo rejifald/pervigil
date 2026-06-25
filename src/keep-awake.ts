@@ -1,5 +1,6 @@
 import {
   wakeLock,
+  type AcquireOptions,
   type WakeLockOptions,
   type WakeLock,
   type WakeLockStatus,
@@ -10,8 +11,8 @@ export interface KeepAwakeOptions extends WakeLockOptions {
   system?: boolean;
   /** Block display sleep. Default `false`. */
   display?: boolean;
-  /** Human-readable reason, surfaced in logs and OS assertion listings. */
-  reason?: string;
+  /** Human-readable description, surfaced in logs and OS assertion listings. */
+  description?: string;
 }
 
 /** A single-purpose handle returned by {@link keepAwake}. */
@@ -46,21 +47,23 @@ interface KeepAwakeFn {
    */
   until(opts: KeepAwakeOptions, when: Date): Promise<WakeLockHandle>;
   /**
-   * Acquire on a single, module-level shared controller that coalesces
-   * overlapping simple locks onto **one** OS primitive — N concurrent
-   * `shared()` holds spawn one primitive, not N.
+   * Join a single, module-level shared controller that coalesces overlapping
+   * simple locks onto **one** OS primitive — N concurrent `shared()` holds
+   * spawn one primitive, not N.
    *
-   * The shared controller is created lazily on the first call and configured
-   * from that call's controller options (`driver` / `logger` / `identity`);
-   * later calls reuse it and their controller options are ignored. The
-   * per-call `system` / `display` / `reason` axes are still honoured.
+   * Deliberately takes only the per-call axes (`system` / `display` /
+   * `description`) — **not** controller config. The shared controller is
+   * created lazily with default configuration, so there is no
+   * first-caller-wins surprise. If you need a configured controller (custom
+   * `identity` / `logger` / `strict` / injected `driver`), create your own
+   * {@link wakeLock} and share the reference.
    *
    * Each call adds a uniquely-keyed reason; the returned handle's `release()`
    * removes only that reason (it never shuts the shared controller down) and is
    * idempotent. Use {@link KeepAwakeFn.shutdownShared} to tear the shared
    * controller down (e.g. on process exit or between tests).
    */
-  shared(opts?: KeepAwakeOptions): Promise<WakeLockHandle>;
+  shared(opts?: AcquireOptions): Promise<WakeLockHandle>;
   /**
    * Shut down and clear the module-level shared controller created by
    * {@link KeepAwakeFn.shared}. No-op if none exists. The next `shared()` call
@@ -74,17 +77,27 @@ interface KeepAwakeFn {
  * entry point; for multi-reason coordination use {@link wakeLock}.
  *
  * ```ts
- * const lock = await keepAwake({ system: true, reason: "nightly backup" });
+ * const lock = await keepAwake({ system: true, description: "nightly backup" });
  * // ... long job ...
  * await lock.release();
  * ```
+ *
+ * With `strict: true` it rejects (instead of degrading to a no-op) when the
+ * host cannot actually be kept awake.
  */
 export const keepAwake: KeepAwakeFn = async function keepAwake(
   opts: KeepAwakeOptions = {},
 ): Promise<WakeLockHandle> {
-  const { system = true, display = false, reason, ...controllerOpts } = opts;
+  const { system = true, display = false, description, ...controllerOpts } = opts;
   const wl = wakeLock(controllerOpts);
-  await wl.acquire(HANDLE_KEY, { system, display, description: reason ?? HANDLE_KEY });
+  try {
+    await wl.acquire(HANDLE_KEY, { system, display, description: description ?? HANDLE_KEY });
+  } catch (err) {
+    // Strict mode rejected: tear the controller down so we don't leak it, then
+    // surface the original error to the caller.
+    await wl.shutdown().catch(() => undefined);
+    throw err;
+  }
   return {
     release: () => wl.shutdown(),
     status: () => wl.status(),
@@ -152,24 +165,24 @@ keepAwake.until = function keepAwakeUntil(
 };
 
 // ── Shared instance ────────────────────────────────────────────────────────
-// A single lazily-created controller that coalesces overlapping `shared()`
-// holds onto one OS primitive. The first caller's controller options
-// configure it; every caller gets a unique key from a monotonic counter.
+// A single lazily-created, default-configured controller that coalesces
+// overlapping `shared()` holds onto one OS primitive. Every caller gets a
+// unique key from a monotonic counter.
 let sharedLock: WakeLock | undefined;
 let sharedKeyCounter = 0;
 
 keepAwake.shared = async function keepAwakeShared(
-  opts: KeepAwakeOptions = {},
+  opts: AcquireOptions = {},
 ): Promise<WakeLockHandle> {
-  const { system = true, display = false, reason, ...controllerOpts } = opts;
+  const { system = true, display = false, description } = opts;
 
-  // Lazily create the shared controller from the FIRST call's controller
-  // options; later calls reuse it and their controller options are ignored.
-  sharedLock ??= wakeLock(controllerOpts);
+  // Lazily create the shared controller with default configuration — no
+  // first-caller-wins config surprise.
+  sharedLock ??= wakeLock();
   const wl = sharedLock;
 
   const key = `keep-awake-shared:${(sharedKeyCounter += 1)}`;
-  await wl.acquire(key, { system, display, description: reason ?? key });
+  await wl.acquire(key, { system, display, description: description ?? key });
 
   // Release removes only this key and never tears the shared controller down.
   let released = false;

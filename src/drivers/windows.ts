@@ -135,6 +135,11 @@ export class WindowsDriver implements Driver {
     return this._restarts;
   }
 
+  /** A PowerShell child is alive ⇒ the execution-state request is in effect. */
+  get held(): boolean {
+    return this._child !== null;
+  }
+
   onPrimitiveDied(cb: () => void): void {
     this._diedCallbacks.push(cb);
   }

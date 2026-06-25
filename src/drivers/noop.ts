@@ -6,6 +6,8 @@ export class NoopDriver implements Driver {
   readonly available = false;
   readonly degradedReason: DegradedReason;
   readonly restarts = 0;
+  /** A no-op driver never holds a real assertion. */
+  readonly held = false;
 
   constructor(reason: Exclude<DegradedReason, null> = "unsupported-platform") {
     this.degradedReason = reason;

@@ -1,5 +1,6 @@
 import { WakeLockEngine } from "./core.js";
 import { detectDriver } from "./detect.js";
+import { WakeLockUnavailableError } from "./errors.js";
 import type {
   DegradedReason,
   Driver,
@@ -24,11 +25,19 @@ export interface AcquireOptions {
 export interface WakeLockStatus {
   /** Driver platform/backend id, e.g. `"macos-caffeinate"`, `"noop"`. */
   platform: string;
-  /** Whether a real OS primitive is active (false ⇒ silently no-op). */
+  /** Whether the driver is capable of a real OS primitive (false ⇒ no-op). */
   available: boolean;
+  /**
+   * Whether the host is actually being kept awake **right now** — a real OS
+   * assertion is in effect. This is the truth, distinct from `available` (the
+   * driver is *capable*) and `engaged` (a reason is *desired*). It is `false`
+   * when degraded, when nothing is engaged, or when the OS primitive has died
+   * and not yet re-engaged.
+   */
+  active: boolean;
   /** Why the driver is degraded, or `null`. */
   degradedReason: DegradedReason;
-  /** Which axes are currently engaged. */
+  /** Which axes currently have a reason desired (intent, not reality). */
   engaged: WakeLockState;
   /** The active reasons per axis. */
   reasons: { system: WakeReason[]; display: WakeReason[] };
@@ -89,6 +98,14 @@ export interface WakeLockOptions {
    * each event.
    */
   onEvent?: (event: WakeLockEvent, status: WakeLockStatus) => void;
+  /**
+   * Fail loud instead of degrading silently. When `true`, `acquire` rejects
+   * with {@link WakeLockUnavailableError} if the driver cannot engage a real OS
+   * primitive (unsupported platform, container, missing binary, forced no-op).
+   * Default `false` — pervigil stays a graceful no-op. Use `strict` when the
+   * job genuinely must not proceed unless the host is actually kept awake.
+   */
+  strict?: boolean;
   /** Stable identity surfaced to the OS (systemd `--who=`, sysfs cookie). */
   identity?: string;
   /** Wall-clock source; injectable for tests. Default `Date.now`. */
@@ -229,9 +246,15 @@ export function wakeLock(opts: WakeLockOptions = {}): WakeLock {
       const start = since[axis];
       if (start !== null) awakeMsTotal[axis] += t - start;
     }
+    const anyEngaged = engine.isEngaged("system") || engine.isEngaged("display");
+    // `active` = a real assertion is in effect now. Fall back to "assume held"
+    // for drivers that don't observe their primitive (`held === undefined`), so
+    // injected/simple drivers still report active whenever engaged + available.
+    const active = driver.available && anyEngaged && (driver.held ?? true);
     return {
       platform: driver.platform,
       available: driver.available,
+      active,
       degradedReason: driver.degradedReason ?? null,
       engaged: { system: engine.isEngaged("system"), display: engine.isEngaged("display") },
       reasons: { system: reasonsFor("system"), display: reasonsFor("display") },
@@ -247,6 +270,12 @@ export function wakeLock(opts: WakeLockOptions = {}): WakeLock {
   return {
     acquire(key, o = {}) {
       return enqueue(async () => {
+        // Strict mode: refuse to pretend. If the driver can't engage a real
+        // primitive, reject instead of silently no-op'ing — and don't record
+        // the hold, since it would never take effect.
+        if (opts.strict && !driver.available) {
+          throw new WakeLockUnavailableError(driver.degradedReason ?? null, driver.platform);
+        }
         // Default to the system axis only when neither axis is specified; an
         // explicitly-set axis must not drag the other to its default.
         const specified = o.system !== undefined || o.display !== undefined;

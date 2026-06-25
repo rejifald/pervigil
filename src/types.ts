@@ -58,6 +58,15 @@ export interface Driver {
   readonly available: boolean;
   /** Why the driver is degraded to no-op, if it is. */
   readonly degradedReason?: DegradedReason;
+  /**
+   * Whether a real OS assertion is in effect **right now** — distinct from
+   * "available" (the driver is capable) and from the controller's "engaged"
+   * (a reason is desired). Goes `false` when the primitive dies between
+   * re-engages. Optional: drivers that can't observe their primitive may omit
+   * it, and the controller then assumes the lock is held whenever a reason is
+   * engaged on an available driver.
+   */
+  readonly held?: boolean;
   /** Count of times the OS primitive died unexpectedly and was recycled. */
   readonly restarts?: number;
   /**
