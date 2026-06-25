@@ -1,6 +1,7 @@
 import { WakeLockEngine } from "./core.js";
 import { detectDriver } from "./detect.js";
 import { WakeLockUnavailableError } from "./errors.js";
+import { registerExitCleanup } from "./internal/exit-cleanup.js";
 import type {
   DegradedReason,
   Driver,
@@ -106,6 +107,18 @@ export interface WakeLockOptions {
    * job genuinely must not proceed unless the host is actually kept awake.
    */
   strict?: boolean;
+  /**
+   * Release the OS primitive automatically when the process exits, so a
+   * forgotten `shutdown()` can't leak an orphaned `caffeinate` /
+   * `systemd-inhibit` / PowerShell child. Default `true`.
+   *
+   * Implemented with a single shared `process` `"exit"` handler (no signal
+   * listeners, so it never interferes with Ctrl-C / your own `SIGINT` /
+   * `SIGTERM` handling). It covers normal exit, `process.exit()`, and Ctrl-C;
+   * for `SIGTERM`-without-a-handler use {@link releaseOnExit} or your own
+   * signal handler. Set `false` to opt out.
+   */
+  autoRelease?: boolean;
   /** Stable identity surfaced to the OS (systemd `--who=`, sysfs cookie). */
   identity?: string;
   /** Wall-clock source; injectable for tests. Default `Date.now`. */
@@ -159,6 +172,16 @@ export function wakeLock(opts: WakeLockOptions = {}): WakeLock {
     counters.primitiveRestarts += 1;
     emit("primitiveDied");
   });
+
+  // Release the OS primitive on process exit by default, so a forgotten
+  // shutdown can't leak an orphaned child. `driver.shutdown()` sends its child
+  // SIGTERM synchronously, which is what an `exit` handler needs.
+  let unregisterExit: (() => void) | undefined;
+  if (opts.autoRelease !== false) {
+    unregisterExit = registerExitCleanup(() => {
+      driver.shutdown().then(undefined, () => undefined);
+    });
+  }
 
   const engine = new WakeLockEngine(driver, {
     onFlush: (state, prev) => {
@@ -308,6 +331,11 @@ export function wakeLock(opts: WakeLockOptions = {}): WakeLock {
       };
     },
     shutdown() {
+      // Stop tracking for exit-cleanup the moment shutdown is requested — the
+      // caller is tearing down explicitly, so the `exit` handler shouldn't also
+      // fire for this lock.
+      unregisterExit?.();
+      unregisterExit = undefined;
       return enqueue(() => engine.shutdown());
     },
   };
