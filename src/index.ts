@@ -16,6 +16,9 @@ export type {
   WakeLockStatus,
 } from "./controller.js";
 
+// ── Errors ───────────────────────────────────────────────────────────────
+export { WakeLockUnavailableError } from "./errors.js";
+
 // ── Driver detection + concrete drivers (advanced wiring / testing) ───────
 export { detectDriver } from "./detect.js";
 export type { DetectOptions } from "./detect.js";

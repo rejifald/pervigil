@@ -22,6 +22,7 @@ describe("collectMetrics", () => {
       );
 
     expect(byKey("pervigil_available")).toMatchObject({ type: "gauge", value: 1 });
+    expect(byKey("pervigil_active")).toMatchObject({ type: "gauge", value: 1 });
     expect(byKey("pervigil_awake", "system")).toMatchObject({ type: "gauge", value: 1 });
     expect(byKey("pervigil_awake", "display")).toMatchObject({ type: "gauge", value: 0 });
     expect(byKey("pervigil_engage_transitions_total", "system")).toMatchObject({
@@ -56,6 +57,8 @@ describe("toPrometheus", () => {
 
     // # TYPE lines for every metric.
     expect(text).toContain("# TYPE pervigil_available gauge");
+    expect(text).toContain("# TYPE pervigil_active gauge");
+    expect(text).toContain("pervigil_active 1");
     expect(text).toContain("# TYPE pervigil_awake gauge");
     expect(text).toContain("# TYPE pervigil_awake_ms_total counter");
     expect(text).toContain("# TYPE pervigil_engage_transitions_total counter");
