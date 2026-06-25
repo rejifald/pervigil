@@ -2,6 +2,10 @@
 export { keepAwake } from "./keep-awake.js";
 export type { KeepAwakeOptions, WakeLockHandle } from "./keep-awake.js";
 
+// ── Auto-release on process exit ─────────────────────────────────────────
+export { autoReleaseOnExit } from "./auto-release.js";
+export type { AutoReleaseOnExitOptions } from "./auto-release.js";
+
 // ── Supervised multi-reason controller ───────────────────────────────────
 export { createWakeLock } from "./controller.js";
 export type {

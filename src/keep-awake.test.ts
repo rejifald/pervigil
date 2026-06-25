@@ -142,3 +142,84 @@ describe("keepAwake.for / keepAwake.until", () => {
     expect(driver.shutdownCalls.length).toBe(1);
   });
 });
+
+describe("keepAwake.shared", () => {
+  let driver: MockWakeLockDriver;
+
+  beforeEach(() => {
+    driver = new MockWakeLockDriver();
+  });
+
+  afterEach(async () => {
+    await keepAwake.shutdownShared();
+  });
+
+  it("coalesces overlapping simple locks onto a single OS primitive", async () => {
+    const a = await keepAwake.shared({ system: true, driver });
+    const b = await keepAwake.shared({ system: true, driver });
+
+    // Both holds ride on a single false→true edge.
+    expect(driver.engageTransitions).toBe(1);
+
+    // Releasing one keeps the shared primitive engaged.
+    await a.release();
+    expect(driver.shutdownCalls.length).toBe(0);
+    expect(driver.engageTransitions).toBe(1);
+
+    // Releasing the last hold disengages the axis.
+    await b.release();
+    expect(driver.disengageCalls.length).toBe(1);
+  });
+
+  it("uses a UNIQUE key per call so concurrent holds do not clobber each other", async () => {
+    const a = await keepAwake.shared({ system: true, driver });
+    const b = await keepAwake.shared({ system: true, driver });
+
+    const reasons = b.status().reasons.system.map((r) => r.key);
+    expect(new Set(reasons).size).toBe(2);
+
+    await a.release();
+    await b.release();
+  });
+
+  it("release() removes only that key and is idempotent", async () => {
+    const a = await keepAwake.shared({ system: true, driver });
+    const b = await keepAwake.shared({ system: true, driver });
+
+    await a.release();
+    await a.release();
+    // Still one hold remaining, shared controller never shut down.
+    expect(driver.shutdownCalls.length).toBe(0);
+    expect(b.status().reasons.system.length).toBe(1);
+
+    await b.release();
+  });
+
+  it("configures the shared controller from the first call's options", async () => {
+    const first = new MockWakeLockDriver();
+    const second = new MockWakeLockDriver();
+
+    const a = await keepAwake.shared({ system: true, driver: first });
+    const b = await keepAwake.shared({ system: true, driver: second });
+
+    // The second call's driver is ignored; everything rides on `first`.
+    expect(first.engageTransitions).toBe(1);
+    expect(second.setStateCalls.length).toBe(0);
+
+    await a.release();
+    await b.release();
+  });
+
+  it("shutdownShared() tears down the shared instance for a clean slate", async () => {
+    const first = new MockWakeLockDriver();
+    await keepAwake.shared({ system: true, driver: first });
+    await keepAwake.shutdownShared();
+    expect(first.shutdownCalls.length).toBe(1);
+
+    // A fresh shared instance can be configured by a new first caller.
+    const second = new MockWakeLockDriver();
+    const b = await keepAwake.shared({ system: true, driver: second });
+    expect(second.engageTransitions).toBe(1);
+    await b.release();
+  });
+});
