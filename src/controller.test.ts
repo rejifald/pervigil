@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { wakeLock } from "./controller.js";
 import { WakeLockUnavailableError } from "./errors.js";
+import { runExitCleanup } from "./internal/exit-cleanup.js";
 import { MockDriver } from "./drivers/mock.js";
 import { NoopDriver } from "./drivers/noop.js";
 import type { DegradedReason, Driver, WakeLockState } from "./types.js";
@@ -381,6 +382,40 @@ describe("wakeLock", () => {
       const wl = wakeLock({ driver: new NoopDriver("container") });
       await expect(wl.acquire("job", { system: true })).resolves.toBeUndefined();
       expect(wl.status().active).toBe(false);
+    });
+  });
+
+  describe("autoRelease on process exit", () => {
+    it("releases the driver on exit by default", async () => {
+      const wl = wakeLock({ driver });
+      await wl.acquire("a", { system: true });
+      expect(driver.shutdownCalls.length).toBe(0);
+
+      runExitCleanup(); // simulate process exit
+
+      expect(driver.shutdownCalls.length).toBe(1);
+      await wl.shutdown();
+    });
+
+    it("does not fire after the lock is shut down (unregistered)", async () => {
+      const wl = wakeLock({ driver });
+      await wl.acquire("a", { system: true });
+      await wl.shutdown();
+      const after = driver.shutdownCalls.length;
+
+      runExitCleanup();
+
+      expect(driver.shutdownCalls.length).toBe(after); // no extra teardown
+    });
+
+    it("autoRelease:false opts out — no teardown on exit", async () => {
+      const wl = wakeLock({ driver, autoRelease: false });
+      await wl.acquire("a", { system: true });
+
+      runExitCleanup();
+
+      expect(driver.shutdownCalls.length).toBe(0);
+      await wl.shutdown();
     });
   });
 });
