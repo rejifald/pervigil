@@ -122,10 +122,14 @@ Opt out per lock with `autoRelease: false` if you want to own teardown entirely:
 const wl = wakeLock({ autoRelease: false });
 ```
 
-The one gap is `SIGTERM` delivered straight to the Node process (it bypasses the
-`exit` event). Under systemd / containers the whole process group is signalled,
-so the child dies anyway; for a bare `kill <pid>` daemon, add explicit signal
-coverage with `releaseOnExit`, which also handles `SIGINT` / `SIGTERM`:
+The default covers normal exit, `process.exit()`, and Ctrl-C. The one case it
+can't is a `SIGTERM` delivered straight to the Node process — that bypasses the
+`exit` event, and a library can't safely install a `SIGTERM` handler by default
+without fighting your app's own shutdown logic. In practice it rarely bites:
+under systemd / containers the whole process group is signalled, so the child
+dies with it. For a bare `kill <pid>` daemon that needs it, opt in with
+`releaseOnExit` — it releases on `SIGINT` / `SIGTERM` and then re-raises the
+signal so the process still terminates normally:
 
 ```ts
 import { wakeLock, releaseOnExit } from "pervigil";

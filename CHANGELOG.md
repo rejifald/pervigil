@@ -24,6 +24,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Broadened npm `keywords` and sharpened the package `description` for
   discoverability. No API change.
 
+### Fixed
+
+- `releaseOnExit` now **re-raises** the signal after releasing, so a process
+  that opts into `SIGINT` / `SIGTERM` coverage still terminates. Previously the
+  installed signal listener suppressed Node's default exit and the process could
+  hang after release instead of exiting.
+
 ## [0.4.0] - 2026-06-25
 
 ### Added
