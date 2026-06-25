@@ -14,7 +14,7 @@ machine awake while long jobs run.
 - **Zero runtime dependencies. No native addons, no `node-gyp`** — it spawns the
   OS's own mechanism, so it installs cleanly on Alpine/musl, ARM, Docker and CI
   with no build toolchain.
-- **Two independent axes** — block *system* sleep and *display* sleep
+- **Two independent axes** — block _system_ sleep and _display_ sleep
   separately.
 - **Fail-safe by default** — in containers, on unsupported platforms, or when
   the OS primitive is missing, it degrades to a silent no-op instead of
@@ -24,16 +24,16 @@ machine awake while long jobs run.
 - **Self-cleaning** — releases the OS primitive automatically when the process
   exits, so a forgotten `release()` never leaks an orphaned `caffeinate` /
   `systemd-inhibit` child. Opt out with `autoRelease: false`.
-- **Observable** — a `status()` snapshot plus counters and events answer *"is the
-  host awake, why, on what backend, and for how long?"*
+- **Observable** — a `status()` snapshot plus counters and events answer _"is the
+  host awake, why, on what backend, and for how long?"_
 - **Typed & testable** — first-class TypeScript, an injectable driver, and a
   shipped mock (`pervigil/testing`).
 
-| Platform | Mechanism |
-| --- | --- |
-| macOS | `caffeinate(1)` |
-| Linux | `systemd-inhibit(1)`, falling back to `/sys/power/wake_lock` |
-| Windows | `SetThreadExecutionState` via a spawned PowerShell process (no native addon) |
+| Platform | Mechanism                                                                    |
+| -------- | ---------------------------------------------------------------------------- |
+| macOS    | `caffeinate(1)`                                                              |
+| Linux    | `systemd-inhibit(1)`, falling back to `/sys/power/wake_lock`                 |
+| Windows  | `SetThreadExecutionState` via a spawned PowerShell process (no native addon) |
 
 Every backend uses the same "supervise a long-lived child" pattern, so there is
 **no native addon and no `node-gyp`** on any platform.
@@ -150,11 +150,11 @@ host awake it degrades to a silent no-op and your job still runs. It no-ops when
 The catch: **"I called `keepAwake`" is not the same as "the host is awake."**
 Three status fields separate the three questions:
 
-| Field | Question |
-| --- | --- |
-| `available` | Is the driver *capable* of a real primitive? (`false` ⇒ no-op) |
-| `engaged` | Is a reason *desired* on this axis? (intent) |
-| `active` | Is a real OS assertion in effect **right now**? (reality) |
+| Field       | Question                                                       |
+| ----------- | -------------------------------------------------------------- |
+| `available` | Is the driver _capable_ of a real primitive? (`false` ⇒ no-op) |
+| `engaged`   | Is a reason _desired_ on this axis? (intent)                   |
+| `active`    | Is a real OS assertion in effect **right now**? (reality)      |
 
 `active` is the truth — it's `false` when degraded, when nothing is held, **or**
 when the OS primitive died and hasn't re-engaged yet, cases that `available` and
@@ -203,8 +203,8 @@ const wl = wakeLock({ identity: "my-app" }); // identity shows in `systemd-inhib
 wl.acquire("job:123", { system: true, description: "import job 123" });
 wl.acquire("view:abc", { display: true, description: "live view abc" });
 
-wl.release("job:123");      // system axis releases; display stays held
-await wl.shutdown();        // release everything, tear down the primitive
+wl.release("job:123"); // system axis releases; display stays held
+await wl.shutdown(); // release everything, tear down the primitive
 ```
 
 ## Observability
@@ -337,15 +337,31 @@ Levels are `silent` | `warn` | `info` | `debug`. Resolution is `logLevel` option
 warnings (container, missing binary, unsupported platform); `info` adds the
 selected-backend line; `debug` adds per-assertion detail.
 
-Prefer your own logger? Pass any pino-shaped sink (`warn`, optional `info` /
-`debug`) and pervigil routes through it instead of the console:
+Prefer your own logger? Pass a `logger` and pervigil routes through it instead
+of the console. Two shapes are accepted:
+
+**A method sink** — any object with a `warn` method (and optional `info` /
+`debug`), called `(fields, msg)`. pino, bunyan, roarr, and `console` drop in
+directly:
 
 ```ts
 import pino from "pino";
 const wl = wakeLock({ logger: pino() }); // forwards everything; pino filters
 ```
 
-`logLevel: "silent"` hard-mutes even a supplied logger.
+**A function sink** — one `(record) => void` callback per line, so loggers with
+a different argument order (winston, consola, …) map cleanly. `record.fields` is
+always an object (`{}` when there's no structured data):
+
+```ts
+const wl = wakeLock({
+  logger: (r) => winston.log(r.level, r.msg ?? "", r.fields),
+});
+```
+
+A `LogRecord` is `{ level: "warn" | "info" | "debug"; msg?: string; fields: object }`.
+
+`logLevel: "silent"` hard-mutes either kind of supplied logger.
 
 ## License
 

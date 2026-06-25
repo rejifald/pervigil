@@ -6,6 +6,7 @@ import type {
   DegradedReason,
   Driver,
   Logger,
+  LoggerFn,
   LogLevel,
   WakeAxis,
   WakeLockState,
@@ -79,11 +80,13 @@ export interface WakeLockOptions {
   /** Inject a driver. Default: {@link detectDriver} for the host platform. */
   driver?: Driver;
   /**
-   * Sink for pervigil's log lines, passed to the default driver. Ignored when
-   * a `driver` is injected (that driver carries its own logger). Defaults to a
-   * built-in console sink, gated by {@link WakeLockOptions.logLevel}.
+   * Sink for pervigil's log lines, passed to the default driver. Either a
+   * method-shaped {@link Logger} (pino/bunyan/console) or a {@link LoggerFn}
+   * (one `LogRecord` per line, for any other logger). Ignored when a `driver`
+   * is injected (that driver carries its own logger). Defaults to a built-in
+   * console sink, gated by {@link WakeLockOptions.logLevel}.
    */
-  logger?: Logger;
+  logger?: Logger | LoggerFn;
   /**
    * Emission threshold for pervigil's own logs. Defaults to `silent` unless a
    * `logger` is supplied. Also settable via `PERVIGIL_LOG_LEVEL`. Ignored when
@@ -264,7 +267,10 @@ export function wakeLock(opts: WakeLockOptions = {}): WakeLock {
 
   function status(): WakeLockStatus {
     const t = now();
-    const awakeMsTotal = { system: counters.awakeMsTotal.system, display: counters.awakeMsTotal.display };
+    const awakeMsTotal = {
+      system: counters.awakeMsTotal.system,
+      display: counters.awakeMsTotal.display,
+    };
     for (const axis of AXES) {
       const start = since[axis];
       if (start !== null) awakeMsTotal[axis] += t - start;

@@ -28,15 +28,45 @@ export interface WakeReason {
 }
 
 /**
- * Pino-shaped logger surface used by drivers. All methods are optional so a
- * plain `console` or `{}` satisfies it. This is the *sink* — where pervigil's
+ * Method-style log sink: an object with a `warn` method (and optional `info` /
+ * `debug`). The call shape is `(fields, msg)` — structured object first, message
+ * second — which matches pino, bunyan, and roarr, so those drop in directly; a
+ * plain `console` or `{}` satisfies it too. This is the *sink* — where pervigil's
  * log lines go; {@link LogLevel} controls *which* lines are emitted.
+ *
+ * For loggers with a different argument order (winston, consola, …) pass a
+ * {@link LoggerFn} instead and map the {@link LogRecord} however you like.
  */
 export interface Logger {
   warn(obj: unknown, msg?: string): void;
   info?(obj: unknown, msg?: string): void;
   debug?(obj: unknown, msg?: string): void;
 }
+
+/**
+ * One log line pervigil wants to emit, normalised for a {@link LoggerFn}.
+ * `fields` is always present — an empty object when there's no structured data —
+ * so `record.fields.x` never throws on you.
+ */
+export interface LogRecord {
+  /** Severity of this line; never `"silent"` (that suppresses emission entirely). */
+  readonly level: Exclude<LogLevel, "silent">;
+  /** Human-readable message, if any. */
+  readonly msg?: string;
+  /** Structured context for the line; `{}` when there is none. */
+  readonly fields: Record<string, unknown>;
+}
+
+/**
+ * Function-style log sink: pervigil hands you one {@link LogRecord} per line and
+ * you forward it to any logger, regardless of its argument order. The escape
+ * hatch for loggers that aren't `(fields, msg)`-shaped:
+ *
+ * ```ts
+ * wakeLock({ logger: (r) => winston.log(r.level, r.msg ?? "", r.fields) });
+ * ```
+ */
+export type LoggerFn = (record: LogRecord) => void;
 
 /**
  * Verbosity threshold for pervigil's own log emission, highest (`debug`) to
