@@ -65,7 +65,7 @@ describe("detectDriver", () => {
     vi.unstubAllEnvs();
     vi.resetModules();
     const originalPlatform = process.platform;
-    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    Object.defineProperty(process, "platform", { value: "freebsd", configurable: true });
     try {
       const { detectDriver } = await import("./detect.js");
       const warn = vi.fn();
@@ -75,8 +75,27 @@ describe("detectDriver", () => {
       expect(driver.degradedReason).toBe("unsupported-platform");
       expect(warn).toHaveBeenCalledTimes(1);
       const [meta, msg] = warn.mock.calls[0]!;
-      expect((meta as { platform: string }).platform).toBe("win32");
+      expect((meta as { platform: string }).platform).toBe("freebsd");
       expect(String(msg)).toMatch(/no-?op|pervigil/i);
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
+    }
+  });
+
+  it("win32 → Windows driver (degraded missing-binary where PowerShell is absent)", async () => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "win32", configurable: true });
+    try {
+      const { detectDriver } = await import("./detect.js");
+      const driver = detectDriver();
+      // On this CI host (macOS/Linux) PowerShell is absent, so the Windows
+      // driver resolves to its no-op variant rather than the unsupported-
+      // platform no-op — proving win32 now routes to the Windows backend.
+      expect(driver.platform).toBe("windows-noop");
+      expect(driver.available).toBe(false);
+      expect(driver.degradedReason).toBe("missing-binary");
     } finally {
       Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
     }
