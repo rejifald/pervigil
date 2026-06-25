@@ -6,6 +6,39 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-25
+
+### Added
+
+- `pervigil/metrics`: a dependency-free adapter exposing `collectMetrics()` (a
+  neutral metric-sample list) and `toPrometheus()` (text exposition) over the
+  cumulative wake-lock counters — adapt the samples to OpenTelemetry, StatsD,
+  JSON, or anything else without coupling to a metrics vendor. (#16)
+- `keepAwake.shared()` / `keepAwake.shutdownShared()`: a lazily-created,
+  module-level controller that coalesces overlapping simple locks onto **one**
+  OS primitive (N concurrent holds spawn one primitive, not N). (#17)
+- `autoReleaseOnExit(target)`: release any lock-like object on `beforeExit` /
+  `SIGINT` / `SIGTERM`, exactly once, returning an unregister function. (#17)
+- Startup info-level log naming the selected driver/backend on detection. (#15)
+
+### Fixed
+
+- `primitiveDied` now fires for **injected** drivers, not only self-built ones,
+  so the controller's restart counter and event are accurate in tests and custom
+  wiring. (#18)
+- CommonJS type resolution: the `require` condition now resolves to `.d.cts`
+  declarations, so CJS/TypeScript consumers get correct types (no more
+  "masquerading as ESM"). `publint` and `are-the-types-wrong` are clean across
+  all entry points and resolution modes.
+
+### Changed
+
+- Packaging: added `sideEffects: false` (better tree-shaking), `typesVersions`
+  (fixes `node10`/classic subpath type resolution for `./testing` and
+  `./metrics`), `publishConfig.access: public`, and a `./package.json` export.
+- Documented that the macOS driver intentionally ignores `identity` —
+  `caffeinate(1)` exposes no owner/identity equivalent. (#18)
+
 ## [0.1.0] - 2026-06-25
 
 ### Added

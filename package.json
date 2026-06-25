@@ -1,6 +1,6 @@
 {
   "name": "pervigil",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Cross-platform host sleep / display-sleep inhibitor for Node — zero dependencies, no native addons, graceful no-op where unsupported.",
   "keywords": [
     "sleep",
@@ -17,26 +17,53 @@
   "license": "MIT",
   "author": "Oleksandr Zhuravlov",
   "type": "module",
+  "sideEffects": false,
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./testing": {
-      "types": "./dist/testing.d.ts",
-      "import": "./dist/testing.js",
-      "require": "./dist/testing.cjs"
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
+      }
     },
     "./metrics": {
-      "types": "./dist/metrics.d.ts",
-      "import": "./dist/metrics.js",
-      "require": "./dist/metrics.cjs"
-    }
+      "import": {
+        "types": "./dist/metrics.d.ts",
+        "default": "./dist/metrics.js"
+      },
+      "require": {
+        "types": "./dist/metrics.d.cts",
+        "default": "./dist/metrics.cjs"
+      }
+    },
+    "./package.json": "./package.json"
   },
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "typesVersions": {
+    "*": {
+      "testing": [
+        "./dist/testing.d.ts"
+      ],
+      "metrics": [
+        "./dist/metrics.d.ts"
+      ]
+    }
+  },
   "files": [
     "dist"
   ],
@@ -72,5 +99,8 @@
     "url": "https://github.com/rejifald/pervigil/issues"
   },
   "homepage": "https://github.com/rejifald/pervigil#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "packageManager": "pnpm@10.33.2"
 }
