@@ -1,13 +1,13 @@
 import { existsSync } from "node:fs";
 import { execSync, spawn, type ChildProcess } from "node:child_process";
 import { killChild } from "../internal/kill-child.js";
-import type { DegradedReason, WakeLockDriver, WakeLockLogger, WakeLockState } from "../types.js";
+import type { DegradedReason, Driver, Logger, WakeLockState } from "../types.js";
 
-export interface MacOSWakeLockDriverOptions {
+export interface MacOSDriverOptions {
   /** Override the caffeinate binary path. Default: auto-probe. For tests. */
   caffeinatePath?: string;
   /** Optional logger. */
-  logger?: WakeLockLogger;
+  logger?: Logger;
   /**
    * No-op on macOS. Accepted for API symmetry with the Linux and Windows
    * drivers, but `caffeinate(1)` exposes no equivalent of an identity string,
@@ -48,19 +48,19 @@ function caffeinateArgs(state: WakeLockState): string[] | null {
 }
 
 /** macOS driver backed by `caffeinate(1)`. */
-export class MacOSWakeLockDriver implements WakeLockDriver {
+export class MacOSDriver implements Driver {
   readonly platform: string;
   readonly available: boolean;
   readonly degradedReason: DegradedReason;
 
   private readonly _caffeinatePath: string;
-  private readonly _logger: WakeLockLogger | undefined;
+  private readonly _logger: Logger | undefined;
   private readonly _diedCallbacks: (() => void)[] = [];
   private _child: ChildProcess | null = null;
   private _currentArgs: string[] | null = null;
   private _restarts = 0;
 
-  constructor(opts: MacOSWakeLockDriverOptions = {}) {
+  constructor(opts: MacOSDriverOptions = {}) {
     this._logger = opts.logger;
     if (opts.onPrimitiveDied) this._diedCallbacks.push(opts.onPrimitiveDied);
 

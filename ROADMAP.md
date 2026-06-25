@@ -3,7 +3,7 @@
 ## Windows support (`SetThreadExecutionState`)
 
 **Status: shipped.** Windows resolves to
-[`WindowsWakeLockDriver`](src/drivers/windows.ts), backed by
+[`WindowsDriver`](src/drivers/windows.ts), backed by
 `SetThreadExecutionState`, and is wired into `detectDriver()`'s
 `process.platform === "win32"` branch — see [`src/detect.ts`](src/detect.ts).
 
@@ -21,7 +21,7 @@ How it works:
 
 When PowerShell is absent, the driver degrades gracefully to a no-op with
 `available === false` and `degradedReason === "missing-binary"`. Other platforms
-(e.g. freebsd) still resolve to `NoopWakeLockDriver` with
+(e.g. freebsd) still resolve to `NoopDriver` with
 `degradedReason === "unsupported-platform"`; callers there should configure
 host-side sleep prevention manually.
 

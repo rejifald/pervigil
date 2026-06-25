@@ -1,7 +1,7 @@
-import type { PervigilLogLevel, WakeLockLogger } from "../types.js";
+import type { LogLevel, Logger } from "../types.js";
 
 /** Numeric rank per level — higher emits strictly more. */
-const RANK: Record<PervigilLogLevel, number> = {
+const RANK: Record<LogLevel, number> = {
   silent: 0,
   warn: 1,
   info: 2,
@@ -9,9 +9,9 @@ const RANK: Record<PervigilLogLevel, number> = {
 };
 
 /** Read + validate `PERVIGIL_LOG_LEVEL`; unknown values are ignored. */
-function envLevel(): PervigilLogLevel | undefined {
+function envLevel(): LogLevel | undefined {
   const raw = process.env["PERVIGIL_LOG_LEVEL"]?.toLowerCase();
-  if (raw && raw in RANK) return raw as PervigilLogLevel;
+  if (raw && raw in RANK) return raw as LogLevel;
   return undefined;
 }
 
@@ -20,7 +20,7 @@ function envLevel(): PervigilLogLevel | undefined {
  * `(obj, msg)` calls are rendered as a single `[pervigil] message` line plus
  * the structured object (omitted when empty, to keep output clean).
  */
-const consoleSink: WakeLockLogger = {
+const consoleSink: Logger = {
   warn: (obj, msg) => emit(console.warn, obj, msg),
   info: (obj, msg) => emit((console.info ?? console.log).bind(console), obj, msg),
   debug: (obj, msg) => emit((console.debug ?? console.log).bind(console), obj, msg),
@@ -37,9 +37,9 @@ function emit(fn: (...args: unknown[]) => void, obj: unknown, msg?: string): voi
 
 export interface ResolveLoggerOptions {
   /** Sink for log lines. Defaults to a built-in console sink. */
-  logger?: WakeLockLogger;
-  /** Emission threshold. See {@link PervigilLogLevel}. */
-  logLevel?: PervigilLogLevel;
+  logger?: Logger;
+  /** Emission threshold. See {@link LogLevel}. */
+  logLevel?: LogLevel;
 }
 
 /**
@@ -54,7 +54,7 @@ export interface ResolveLoggerOptions {
  * Returns `undefined` at `silent`, so call sites can keep using `logger?.warn`
  * and pay nothing when logging is off.
  */
-export function resolveLogger(opts: ResolveLoggerOptions = {}): WakeLockLogger | undefined {
+export function resolveLogger(opts: ResolveLoggerOptions = {}): Logger | undefined {
   const level = opts.logLevel ?? envLevel() ?? (opts.logger ? "debug" : "silent");
   if (level === "silent") return undefined;
 

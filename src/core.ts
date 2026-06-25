@@ -1,4 +1,4 @@
-import type { WakeAxis, WakeLockDriver, WakeLockState, WakeReason } from "./types.js";
+import type { WakeAxis, Driver, WakeLockState, WakeReason } from "./types.js";
 
 function joinedDescription(reasons: Iterable<WakeReason>): string {
   const descs = [...new Set([...reasons].map((r) => r.description ?? r.key))].sort();
@@ -19,7 +19,7 @@ export interface EngineHooks {
 
 /**
  * The reconcile engine. Holds a desired reason set per axis and drives the
- * injected {@link WakeLockDriver} whenever the derived (system, display) state
+ * injected {@link Driver} whenever the derived (system, display) state
  * or the joined description changes. Idempotent calls are coalesced.
  */
 export class WakeLockEngine {
@@ -30,7 +30,7 @@ export class WakeLockEngine {
   private shutdown_ = false;
 
   constructor(
-    private readonly driver: WakeLockDriver,
+    private readonly driver: Driver,
     private readonly hooks: EngineHooks = {},
   ) {}
 

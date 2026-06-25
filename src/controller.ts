@@ -2,10 +2,10 @@ import { WakeLockEngine } from "./core.js";
 import { detectDriver } from "./detect.js";
 import type {
   DegradedReason,
-  PervigilLogLevel,
+  Driver,
+  Logger,
+  LogLevel,
   WakeAxis,
-  WakeLockDriver,
-  WakeLockLogger,
   WakeLockState,
   WakeReason,
 } from "./types.js";
@@ -65,21 +65,21 @@ export interface WakeLock {
   shutdown(): Promise<void>;
 }
 
-export interface CreateWakeLockOptions {
+export interface WakeLockOptions {
   /** Inject a driver. Default: {@link detectDriver} for the host platform. */
-  driver?: WakeLockDriver;
+  driver?: Driver;
   /**
    * Sink for pervigil's log lines, passed to the default driver. Ignored when
    * a `driver` is injected (that driver carries its own logger). Defaults to a
-   * built-in console sink, gated by {@link CreateWakeLockOptions.logLevel}.
+   * built-in console sink, gated by {@link WakeLockOptions.logLevel}.
    */
-  logger?: WakeLockLogger;
+  logger?: Logger;
   /**
    * Emission threshold for pervigil's own logs. Defaults to `silent` unless a
    * `logger` is supplied. Also settable via `PERVIGIL_LOG_LEVEL`. Ignored when
    * a `driver` is injected.
    */
-  logLevel?: PervigilLogLevel;
+  logLevel?: LogLevel;
   /**
    * Telemetry hook fired on every lifecycle event (`engaged`, `disengaged`,
    * `reasonsChanged`, `primitiveDied`, `degraded`) with a fresh status
@@ -108,7 +108,7 @@ const AXES: readonly WakeAxis[] = ["system", "display"];
  * reasons by key; the controller reconciles them onto the two independent
  * axes and drives the OS primitive, while tracking observability counters.
  */
-export function createWakeLock(opts: CreateWakeLockOptions = {}): WakeLock {
+export function wakeLock(opts: WakeLockOptions = {}): WakeLock {
   const now = opts.now ?? (() => Date.now());
   const listeners = new Map<WakeLockEvent, Set<(s: WakeLockStatus) => void>>();
   const holds = new Map<string, Hold>();
@@ -123,7 +123,7 @@ export function createWakeLock(opts: CreateWakeLockOptions = {}): WakeLock {
     display: null,
   };
 
-  const driver: WakeLockDriver =
+  const driver: Driver =
     opts.driver ??
     detectDriver({
       logger: opts.logger,

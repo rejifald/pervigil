@@ -3,14 +3,14 @@ export { keepAwake } from "./keep-awake.js";
 export type { KeepAwakeOptions, WakeLockHandle } from "./keep-awake.js";
 
 // ── Auto-release on process exit ─────────────────────────────────────────
-export { autoReleaseOnExit } from "./auto-release.js";
-export type { AutoReleaseOnExitOptions } from "./auto-release.js";
+export { releaseOnExit } from "./auto-release.js";
+export type { AutoReleaseOptions } from "./auto-release.js";
 
 // ── Supervised multi-reason controller ───────────────────────────────────
-export { createWakeLock } from "./controller.js";
+export { wakeLock } from "./controller.js";
 export type {
   AcquireOptions,
-  CreateWakeLockOptions,
+  WakeLockOptions,
   WakeLock,
   WakeLockEvent,
   WakeLockStatus,
@@ -18,22 +18,22 @@ export type {
 
 // ── Driver detection + concrete drivers (advanced wiring / testing) ───────
 export { detectDriver } from "./detect.js";
-export type { DetectDriverOptions } from "./detect.js";
-export { NoopWakeLockDriver } from "./drivers/noop.js";
-export { MacOSWakeLockDriver } from "./drivers/macos.js";
-export type { MacOSWakeLockDriverOptions } from "./drivers/macos.js";
-export { LinuxWakeLockDriver } from "./drivers/linux.js";
-export type { LinuxWakeLockDriverOptions } from "./drivers/linux.js";
-export { WindowsWakeLockDriver } from "./drivers/windows.js";
-export type { WindowsWakeLockDriverOptions } from "./drivers/windows.js";
+export type { DetectOptions } from "./detect.js";
+export { NoopDriver } from "./drivers/noop.js";
+export { MacOSDriver } from "./drivers/macos.js";
+export type { MacOSDriverOptions } from "./drivers/macos.js";
+export { LinuxDriver } from "./drivers/linux.js";
+export type { LinuxDriverOptions } from "./drivers/linux.js";
+export { WindowsDriver } from "./drivers/windows.js";
+export type { WindowsDriverOptions } from "./drivers/windows.js";
 
 // ── Shared types ─────────────────────────────────────────────────────────
 export type {
   DegradedReason,
-  PervigilLogLevel,
+  Driver,
+  Logger,
+  LogLevel,
   WakeAxis,
-  WakeLockDriver,
-  WakeLockLogger,
   WakeLockState,
   WakeReason,
 } from "./types.js";

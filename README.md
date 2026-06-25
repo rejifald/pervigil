@@ -97,28 +97,28 @@ await keepAwake.shutdownShared();
 
 ### Auto-release on process exit
 
-`autoReleaseOnExit` releases any lock-like object (anything with `shutdown()`)
+`releaseOnExit` releases any lock-like object (anything with `shutdown()`)
 on `beforeExit` and on `SIGINT` / `SIGTERM`, exactly once. It returns an
 unregister function so you can hand teardown back to your own signal handlers:
 
 ```ts
-import { createWakeLock, autoReleaseOnExit } from "pervigil";
+import { wakeLock, releaseOnExit } from "pervigil";
 
-const wl = createWakeLock();
-const stop = autoReleaseOnExit(wl); // wl.shutdown() runs on exit / Ctrl-C
+const wl = wakeLock();
+const stop = releaseOnExit(wl); // wl.shutdown() runs on exit / Ctrl-C
 // ... later, if you take over shutdown yourself:
 stop();
 ```
 
 ## Supervised, multi-reason controller
 
-For daemons that hold several overlapping reasons, use `createWakeLock`. It
+For daemons that hold several overlapping reasons, use `wakeLock`. It
 reconciles reasons (by key) onto the two axes and drives one OS primitive:
 
 ```ts
-import { createWakeLock } from "pervigil";
+import { wakeLock } from "pervigil";
 
-const wl = createWakeLock({ identity: "my-app" }); // identity shows in `systemd-inhibit --list`
+const wl = wakeLock({ identity: "my-app" }); // identity shows in `systemd-inhibit --list`
 
 wl.acquire("job:123", { system: true, description: "import job 123" });
 wl.acquire("view:abc", { display: true, description: "live view abc" });
@@ -130,7 +130,7 @@ await wl.shutdown();        // release everything, tear down the primitive
 ## Observability
 
 ```ts
-const wl = createWakeLock();
+const wl = wakeLock();
 wl.on("engaged", (s) => console.log("awake:", s.reasons));
 wl.on("degraded", (s) => console.warn("no-op:", s.degradedReason));
 
@@ -156,7 +156,7 @@ For telemetry, `onEvent` is a single hook that fires on **every** event with a
 fresh snapshot — wire it once at construction instead of subscribing to each:
 
 ```ts
-const wl = createWakeLock({
+const wl = wakeLock({
   onEvent: (event, status) => metrics.record(event, status), // OTel/StatsD/logs
 });
 ```
@@ -167,7 +167,7 @@ the lock.
 At the OS level you can also see the assertion directly — `pmset -g assertions`
 on macOS, or `systemd-inhibit --list` (look for your `identity`) on Linux.
 
-The `identity` you pass to `createWakeLock` surfaces the assertion's owner on
+The `identity` you pass to `wakeLock` surfaces the assertion's owner on
 Linux (`systemd-inhibit --who=`, or the sysfs wake-lock cookie) and tags it on
 Windows, but has no effect on macOS — `caffeinate(1)` exposes no equivalent, so
 the value is silently ignored there.
@@ -179,10 +179,10 @@ neutral sample list — **no `prom-client` dependency**, so you can adapt the
 samples to OpenTelemetry, StatsD, JSON, or anything else:
 
 ```ts
-import { createWakeLock } from "pervigil";
+import { wakeLock } from "pervigil";
 import { toPrometheus, collectMetrics } from "pervigil/metrics";
 
-const wl = createWakeLock();
+const wl = wakeLock();
 
 // Expose a /metrics endpoint (any HTTP framework):
 res.setHeader("content-type", "text/plain; version=0.0.4");
@@ -205,10 +205,10 @@ callback:
 
 ```ts
 import { metrics } from "@opentelemetry/api";
-import { createWakeLock } from "pervigil";
+import { wakeLock } from "pervigil";
 import { collectMetrics } from "pervigil/metrics";
 
-const wl = createWakeLock();
+const wl = wakeLock();
 const meter = metrics.getMeter("pervigil");
 
 for (const name of ["pervigil_awake", "pervigil_awake_ms_total"]) {
@@ -226,11 +226,11 @@ A deterministic in-memory driver lives at `pervigil/testing` so it never ships
 in production bundles:
 
 ```ts
-import { createWakeLock } from "pervigil";
-import { MockWakeLockDriver } from "pervigil/testing";
+import { wakeLock } from "pervigil";
+import { MockDriver } from "pervigil/testing";
 
-const driver = new MockWakeLockDriver();
-const wl = createWakeLock({ driver });
+const driver = new MockDriver();
+const wl = wakeLock({ driver });
 
 await wl.acquire("job", { system: true });
 expect(driver.engageTransitions).toBe(1);
@@ -256,7 +256,7 @@ pervigil is **silent by default** — it never writes to your console unless you
 opt in. Turn it on with a level, either per-call or via the environment:
 
 ```ts
-const wl = createWakeLock({ logLevel: "warn" }); // built-in console sink
+const wl = wakeLock({ logLevel: "warn" }); // built-in console sink
 ```
 
 ```sh
@@ -273,7 +273,7 @@ Prefer your own logger? Pass any pino-shaped sink (`warn`, optional `info` /
 
 ```ts
 import pino from "pino";
-const wl = createWakeLock({ logger: pino() }); // forwards everything; pino filters
+const wl = wakeLock({ logger: pino() }); // forwards everything; pino filters
 ```
 
 `logLevel: "silent"` hard-mutes even a supplied logger.
