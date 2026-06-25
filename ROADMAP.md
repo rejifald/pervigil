@@ -25,6 +25,15 @@ When PowerShell is absent, the driver degrades gracefully to a no-op with
 `degradedReason === "unsupported-platform"`; callers there should configure
 host-side sleep prevention manually.
 
+## Metrics adapter
+
+**Status: shipped (Prometheus).** `pervigil/metrics` exposes `collectMetrics()`
+(neutral sample list) and `toPrometheus()` over the existing counters, with no
+runtime dependency — see [`src/metrics.ts`](src/metrics.ts).
+
 ## Possible follow-ups
 
-- Optional metrics adapter (Prometheus/OpenTelemetry) over the existing counters.
+- An OpenTelemetry example/recipe alongside the Prometheus renderer (the neutral
+  `collectMetrics()` samples already adapt to any backend).
+- Real integration tests on CI that engage the lock and assert via
+  `pmset -g assertions` / `systemd-inhibit --list`, plus a `windows-latest` job.
