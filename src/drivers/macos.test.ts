@@ -141,6 +141,21 @@ describe("MacOSWakeLockDriver", () => {
     expect(mockSpawn).toHaveBeenCalledTimes(2);
   });
 
+  it("invokes a callback registered via onPrimitiveDied on unexpected exit", async () => {
+    const driver = await makeDriver({ exists: true });
+    const onDied = vi.fn();
+    driver.onPrimitiveDied(onDied);
+
+    await driver.setState({ system: true, display: false }, "first");
+
+    // Simulate caffeinate dying externally.
+    fakeChild.exitCode = 0;
+    fakeChild.emit("exit", 0, null);
+
+    expect(onDied).toHaveBeenCalledTimes(1);
+    expect(driver.restarts).toBe(1);
+  });
+
   it("setState({system:true}) spawns caffeinate -i", async () => {
     const driver = await makeDriver({ exists: true });
     await driver.setState({ system: true, display: false }, "test reason");

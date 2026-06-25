@@ -18,4 +18,9 @@ export class NoopWakeLockDriver implements WakeLockDriver {
   async shutdown(): Promise<void> {
     // no-op
   }
+
+  onPrimitiveDied(_cb: () => void): void {
+    // The no-op driver has no OS primitive that can die, so registered
+    // callbacks are never invoked.
+  }
 }

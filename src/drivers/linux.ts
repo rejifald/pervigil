@@ -73,7 +73,7 @@ export class LinuxWakeLockDriver implements WakeLockDriver {
   private readonly sysfsWakeUnlockPath: string;
   private readonly logger: WakeLockLogger;
   private readonly identity: string;
-  private readonly onPrimitiveDied: (() => void) | undefined;
+  private readonly diedCallbacks: (() => void)[] = [];
 
   private child: cp.ChildProcess | null = null;
   private currentWhat: string | null = null;
@@ -87,7 +87,7 @@ export class LinuxWakeLockDriver implements WakeLockDriver {
     this.sysfsWakeUnlockPath = opts.sysfsWakeUnlockPath ?? "/sys/power/wake_unlock";
     this.logger = opts.logger ?? NOOP_LOGGER;
     this.identity = opts.identity ?? "pervigil";
-    this.onPrimitiveDied = opts.onPrimitiveDied;
+    if (opts.onPrimitiveDied) this.diedCallbacks.push(opts.onPrimitiveDied);
 
     const backend =
       opts.forceBackend ?? detectBackend(this.systemdInhibitPath, this.sysfsWakeLockPath);
@@ -117,6 +117,20 @@ export class LinuxWakeLockDriver implements WakeLockDriver {
 
   get restarts(): number {
     return this._restarts;
+  }
+
+  onPrimitiveDied(cb: () => void): void {
+    this.diedCallbacks.push(cb);
+  }
+
+  private emitPrimitiveDied(): void {
+    for (const cb of this.diedCallbacks) {
+      try {
+        cb();
+      } catch {
+        // A misbehaving death callback must never break the driver.
+      }
+    }
   }
 
   async setState(state: WakeLockState, description: string): Promise<void> {
@@ -223,7 +237,7 @@ export class LinuxWakeLockDriver implements WakeLockDriver {
           { code, signal },
           "systemd-inhibit exited unexpectedly — sleep inhibitor dropped, will re-engage on next change",
         );
-        this.onPrimitiveDied?.();
+        this.emitPrimitiveDied();
       }
       clearIfCurrent();
     });
