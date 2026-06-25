@@ -3,6 +3,7 @@ import type { WakeLockDriver, WakeLockLogger } from "./types.js";
 import { NoopWakeLockDriver } from "./drivers/noop.js";
 import { MacOSWakeLockDriver } from "./drivers/macos.js";
 import { LinuxWakeLockDriver } from "./drivers/linux.js";
+import { WindowsWakeLockDriver } from "./drivers/windows.js";
 
 function isContainer(): boolean {
   if (existsSync("/.dockerenv")) return true;
@@ -50,8 +51,12 @@ export function detectDriver(opts: DetectDriverOptions = {}): WakeLockDriver {
     return new LinuxWakeLockDriver({ logger, identity, onPrimitiveDied });
   }
 
-  // win32 and other platforms are not yet implemented — see ROADMAP.md
-  // (Windows via SetThreadExecutionState). Warn so it isn't silently lost.
+  if (process.platform === "win32") {
+    return new WindowsWakeLockDriver({ logger, identity, onPrimitiveDied });
+  }
+
+  // Remaining platforms (e.g. freebsd) have no sleep-inhibitor backend. Warn so
+  // it isn't silently lost.
   logger?.warn(
     { platform: process.platform },
     "No sleep-inhibitor backend for this platform — pervigil is a no-op. Configure host-side sleep prevention manually.",

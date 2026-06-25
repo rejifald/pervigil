@@ -20,6 +20,8 @@ export { MacOSWakeLockDriver } from "./drivers/macos.js";
 export type { MacOSWakeLockDriverOptions } from "./drivers/macos.js";
 export { LinuxWakeLockDriver } from "./drivers/linux.js";
 export type { LinuxWakeLockDriverOptions } from "./drivers/linux.js";
+export { WindowsWakeLockDriver } from "./drivers/windows.js";
+export type { WindowsWakeLockDriverOptions } from "./drivers/windows.js";
 
 // ── Shared types ─────────────────────────────────────────────────────────
 export type {
