@@ -101,6 +101,42 @@ describe("detectDriver", () => {
     }
   });
 
+  it("darwin → emits exactly one info line naming the selected platform", async () => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "darwin", configurable: true });
+    try {
+      const { detectDriver } = await import("./detect.js");
+      const info = vi.fn();
+      const warn = vi.fn();
+      detectDriver({ logger: { warn, info } });
+      expect(info).toHaveBeenCalledTimes(1);
+      const [meta] = info.mock.calls[0]!;
+      expect(typeof (meta as { platform: unknown }).platform).toBe("string");
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
+    }
+  });
+
+  it("linux → emits exactly one info line naming the selected platform", async () => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+    try {
+      const { detectDriver } = await import("./detect.js");
+      const info = vi.fn();
+      const warn = vi.fn();
+      detectDriver({ logger: { warn, info } });
+      expect(info).toHaveBeenCalledTimes(1);
+      const [meta] = info.mock.calls[0]!;
+      expect(typeof (meta as { platform: unknown }).platform).toBe("string");
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
+    }
+  });
+
   it("container detection passes a warning to the supplied logger", async () => {
     vi.stubEnv("container", "podman");
     vi.resetModules();

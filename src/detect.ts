@@ -44,15 +44,21 @@ export function detectDriver(opts: DetectDriverOptions = {}): WakeLockDriver {
   }
 
   if (process.platform === "darwin") {
-    return new MacOSWakeLockDriver({ logger, identity, onPrimitiveDied });
+    const driver = new MacOSWakeLockDriver({ logger, identity, onPrimitiveDied });
+    logger?.info?.({ platform: driver.platform, available: driver.available }, "pervigil: using " + driver.platform);
+    return driver;
   }
 
   if (process.platform === "linux") {
-    return new LinuxWakeLockDriver({ logger, identity, onPrimitiveDied });
+    const driver = new LinuxWakeLockDriver({ logger, identity, onPrimitiveDied });
+    logger?.info?.({ platform: driver.platform, available: driver.available }, "pervigil: using " + driver.platform);
+    return driver;
   }
 
   if (process.platform === "win32") {
-    return new WindowsWakeLockDriver({ logger, identity, onPrimitiveDied });
+    const driver = new WindowsWakeLockDriver({ logger, identity, onPrimitiveDied });
+    logger?.info?.({ platform: driver.platform, available: driver.available }, "pervigil: using " + driver.platform);
+    return driver;
   }
 
   // Remaining platforms (e.g. freebsd) have no sleep-inhibitor backend. Warn so
