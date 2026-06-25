@@ -28,4 +28,3 @@ host-side sleep prevention manually.
 ## Possible follow-ups
 
 - Optional metrics adapter (Prometheus/OpenTelemetry) over the existing counters.
-- A timed-window helper (auto-release after a duration).
