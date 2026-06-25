@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { keepAwake } from "./keep-awake.js";
 import { MockWakeLockDriver } from "./drivers/mock.js";
 
@@ -61,5 +61,84 @@ describe("keepAwake", () => {
     expect(typeof lock[Symbol.asyncDispose]).toBe("function");
     await lock[Symbol.asyncDispose]();
     expect(driver.shutdownCalls.length).toBeGreaterThan(0);
+  });
+});
+
+describe("keepAwake.for / keepAwake.until", () => {
+  let driver: MockWakeLockDriver;
+
+  beforeEach(() => {
+    driver = new MockWakeLockDriver();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("for() engages immediately and auto-releases after the duration", async () => {
+    const lock = await keepAwake.for({ system: true, driver }, 1000);
+    // Engaged immediately — exactly one false→true edge.
+    expect(driver.engageTransitions).toBe(1);
+    expect(driver.shutdownCalls.length).toBe(0);
+    expect(lock.status().platform).toBe("mock");
+
+    await vi.advanceTimersByTimeAsync(1000);
+    // Fired exactly once.
+    expect(driver.shutdownCalls.length).toBe(1);
+  });
+
+  it("for() does not release before the deadline", async () => {
+    await keepAwake.for({ system: true, driver }, 1000);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(driver.shutdownCalls.length).toBe(0);
+  });
+
+  it("manual release() before the deadline releases once and cancels the timer", async () => {
+    const lock = await keepAwake.for({ system: true, driver }, 1000);
+
+    await lock.release();
+    expect(driver.shutdownCalls.length).toBe(1);
+
+    // Advancing past the deadline must NOT release again (timer was cleared).
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(driver.shutdownCalls.length).toBe(1);
+  });
+
+  it("release() is idempotent", async () => {
+    const lock = await keepAwake.for({ system: true, driver }, 1000);
+    await lock.release();
+    await lock.release();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(driver.shutdownCalls.length).toBe(1);
+  });
+
+  it("Symbol.asyncDispose on a for() handle also cancels the timer", async () => {
+    const lock = await keepAwake.for({ system: true, driver }, 1000);
+    await lock[Symbol.asyncDispose]();
+    expect(driver.shutdownCalls.length).toBe(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(driver.shutdownCalls.length).toBe(1);
+  });
+
+  it("until() releases around the deadline", async () => {
+    const when = new Date(Date.now() + 500);
+    await keepAwake.until({ system: true, driver }, when);
+    expect(driver.engageTransitions).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(499);
+    expect(driver.shutdownCalls.length).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(driver.shutdownCalls.length).toBe(1);
+  });
+
+  it("until() with a past date releases on the next tick", async () => {
+    const when = new Date(Date.now() - 5000);
+    await keepAwake.until({ system: true, driver }, when);
+    expect(driver.shutdownCalls.length).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(driver.shutdownCalls.length).toBe(1);
   });
 });
