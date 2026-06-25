@@ -1,0 +1,12 @@
+# Source is shipped only as compiled dist/ (see "files" in package.json).
+# This file is a backstop in case "files" is ever removed.
+src/
+.github/
+coverage/
+*.test.ts
+tsup.config.ts
+vitest.config.ts
+eslint.config.mjs
+.prettierrc.json
+tsconfig.json
+ROADMAP.md

@@ -1,0 +1,71 @@
+{
+  "name": "pervigil",
+  "version": "0.1.0",
+  "description": "Cross-platform host sleep / display-sleep inhibitor for Node — zero dependencies, no native addons, graceful no-op where unsupported.",
+  "keywords": [
+    "sleep",
+    "wake",
+    "wake-lock",
+    "caffeinate",
+    "systemd-inhibit",
+    "power-management",
+    "prevent-sleep",
+    "keep-awake",
+    "idle",
+    "insomnia"
+  ],
+  "license": "MIT",
+  "author": "Oleksandr Zhuravlov",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js",
+      "require": "./dist/testing.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepublishOnly": "pnpm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "tsup": "^8.3.5",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^3.2.4"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rejifald/pervigil.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rejifald/pervigil/issues"
+  },
+  "homepage": "https://github.com/rejifald/pervigil#readme",
+  "packageManager": "pnpm@10.33.2"
+}
