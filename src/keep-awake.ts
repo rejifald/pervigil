@@ -1,4 +1,9 @@
-import { createWakeLock, type CreateWakeLockOptions, type WakeLockStatus } from "./controller.js";
+import {
+  createWakeLock,
+  type CreateWakeLockOptions,
+  type WakeLock,
+  type WakeLockStatus,
+} from "./controller.js";
 
 export interface KeepAwakeOptions extends CreateWakeLockOptions {
   /** Block system sleep. Default `true`. */
@@ -40,6 +45,28 @@ interface KeepAwakeFn {
    * releases on the next tick).
    */
   until(opts: KeepAwakeOptions, when: Date): Promise<WakeLockHandle>;
+  /**
+   * Acquire on a single, module-level shared controller that coalesces
+   * overlapping simple locks onto **one** OS primitive — N concurrent
+   * `shared()` holds spawn one primitive, not N.
+   *
+   * The shared controller is created lazily on the first call and configured
+   * from that call's controller options (`driver` / `logger` / `identity`);
+   * later calls reuse it and their controller options are ignored. The
+   * per-call `system` / `display` / `reason` axes are still honoured.
+   *
+   * Each call adds a uniquely-keyed reason; the returned handle's `release()`
+   * removes only that reason (it never shuts the shared controller down) and is
+   * idempotent. Use {@link KeepAwakeFn.shutdownShared} to tear the shared
+   * controller down (e.g. on process exit or between tests).
+   */
+  shared(opts?: KeepAwakeOptions): Promise<WakeLockHandle>;
+  /**
+   * Shut down and clear the module-level shared controller created by
+   * {@link KeepAwakeFn.shared}. No-op if none exists. The next `shared()` call
+   * lazily creates a fresh one.
+   */
+  shutdownShared(): Promise<void>;
 }
 
 /**
@@ -122,4 +149,46 @@ keepAwake.until = function keepAwakeUntil(
 ): Promise<WakeLockHandle> {
   const ms = Math.max(0, when.getTime() - Date.now());
   return keepAwake.for(opts, ms);
+};
+
+// ── Shared instance ────────────────────────────────────────────────────────
+// A single lazily-created controller that coalesces overlapping `shared()`
+// holds onto one OS primitive. The first caller's controller options
+// configure it; every caller gets a unique key from a monotonic counter.
+let sharedLock: WakeLock | undefined;
+let sharedKeyCounter = 0;
+
+keepAwake.shared = async function keepAwakeShared(
+  opts: KeepAwakeOptions = {},
+): Promise<WakeLockHandle> {
+  const { system = true, display = false, reason, ...controllerOpts } = opts;
+
+  // Lazily create the shared controller from the FIRST call's controller
+  // options; later calls reuse it and their controller options are ignored.
+  sharedLock ??= createWakeLock(controllerOpts);
+  const wl = sharedLock;
+
+  const key = `keep-awake-shared:${(sharedKeyCounter += 1)}`;
+  await wl.acquire(key, { system, display, description: reason ?? key });
+
+  // Release removes only this key and never tears the shared controller down.
+  let released = false;
+  const release = async (): Promise<void> => {
+    if (released) return;
+    released = true;
+    await wl.release(key);
+  };
+
+  return {
+    release,
+    status: () => wl.status(),
+    [Symbol.asyncDispose]: release,
+  };
+};
+
+keepAwake.shutdownShared = async function keepAwakeShutdownShared(): Promise<void> {
+  const wl = sharedLock;
+  if (!wl) return;
+  sharedLock = undefined;
+  await wl.shutdown();
 };
