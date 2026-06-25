@@ -2,6 +2,60 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createWakeLock } from "./controller.js";
 import { MockWakeLockDriver } from "./drivers/mock.js";
 import { NoopWakeLockDriver } from "./drivers/noop.js";
+import type { DegradedReason, WakeLockDriver, WakeLockState } from "./types.js";
+
+const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+/**
+ * A driver whose `setState`/`shutdown` resolve only after a macrotask delay,
+ * and which tracks how many `setState` calls are in flight at once. If the
+ * controller did not serialize, overlapping calls would push
+ * `maxConcurrentSetState` above 1 and leave torn state behind.
+ */
+class DelayedDriver implements WakeLockDriver {
+  readonly platform = "delayed";
+  readonly available = true;
+  readonly degradedReason: DegradedReason = null;
+  readonly restarts = 0;
+
+  readonly setStateCalls: { state: WakeLockState; description: string }[] = [];
+  private inFlight = 0;
+  maxConcurrentSetState = 0;
+
+  async setState(state: WakeLockState, description: string): Promise<void> {
+    this.inFlight += 1;
+    this.maxConcurrentSetState = Math.max(this.maxConcurrentSetState, this.inFlight);
+    await tick();
+    this.setStateCalls.push({ state, description });
+    this.inFlight -= 1;
+  }
+
+  async shutdown(): Promise<void> {
+    await tick();
+  }
+}
+
+/** A driver that can be told to reject its next `setState`. */
+class FlakyDriver implements WakeLockDriver {
+  readonly platform = "flaky";
+  readonly available = true;
+  readonly degradedReason: DegradedReason = null;
+  readonly restarts = 0;
+
+  failNext = false;
+
+  async setState(): Promise<void> {
+    await tick();
+    if (this.failNext) {
+      this.failNext = false;
+      throw new Error("boom");
+    }
+  }
+
+  async shutdown(): Promise<void> {
+    await tick();
+  }
+}
 
 describe("createWakeLock", () => {
   let driver: MockWakeLockDriver;
@@ -106,5 +160,68 @@ describe("createWakeLock", () => {
     await wl.acquire("a", { system: true });
     await wl.shutdown();
     expect(driver.shutdownCalls.length).toBeGreaterThan(0);
+  });
+
+  it("a both-axes acquire from idle makes exactly one setState with no intermediate state", async () => {
+    const wl = createWakeLock({ driver });
+    await wl.acquire("job", { system: true, display: true, description: "import" });
+
+    expect(driver.setStateCalls).toHaveLength(1);
+    expect(driver.setStateCalls[0]!.state).toEqual({ system: true, display: true });
+    // The buggy two-call reconcile would pass through {system:true, display:false}.
+    expect(
+      driver.setStateCalls.some((c) => c.state.system === true && c.state.display === false),
+    ).toBe(false);
+  });
+
+  it("serializes concurrent acquire/release so the final state is deterministic", async () => {
+    // A driver whose I/O is deliberately delayed, so un-serialized operations
+    // would interleave with an in-flight setState and tear state apart.
+    const delayed = new DelayedDriver();
+    const wl = createWakeLock({ driver: delayed });
+
+    // Fire several overlapping ops WITHOUT awaiting between them.
+    const ops = [
+      wl.acquire("a", { system: true }),
+      wl.acquire("b", { display: true }),
+      wl.release("a"),
+      wl.acquire("c", { system: true }),
+    ];
+    await Promise.all(ops);
+
+    // Final desired state: b (display) + c (system) held, a released.
+    expect(wl.status().engaged).toEqual({ system: true, display: true });
+    expect(
+      wl
+        .status()
+        .reasons.system.map((r) => r.key)
+        .sort(),
+    ).toEqual(["c"]);
+    expect(
+      wl
+        .status()
+        .reasons.display.map((r) => r.key)
+        .sort(),
+    ).toEqual(["b"]);
+
+    // No setState ran while another was still in flight (no torn intermediate).
+    expect(delayed.maxConcurrentSetState).toBe(1);
+    // The last reconciled state the driver saw matches the final engaged state.
+    expect(delayed.setStateCalls.at(-1)!.state).toEqual({ system: true, display: true });
+  });
+
+  it("a rejected op does not break the queue for subsequent ops", async () => {
+    const flaky = new FlakyDriver();
+    const wl = createWakeLock({ driver: flaky });
+
+    flaky.failNext = true;
+    const failing = wl.acquire("bad", { system: true });
+    const following = wl.acquire("good", { display: true });
+
+    await expect(failing).rejects.toThrow("boom");
+    await expect(following).resolves.toBeUndefined();
+
+    expect(wl.status().reasons.display.map((r) => r.key)).toEqual(["good"]);
+    expect(wl.status().engaged.display).toBe(true);
   });
 });
