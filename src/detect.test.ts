@@ -50,7 +50,7 @@ describe("detectDriver", () => {
     expect(driver.available).toBe(false);
   });
 
-  it("no force, no container → returns a WakeLockDriver shape without throwing", async () => {
+  it("no force, no container → returns a Driver shape without throwing", async () => {
     vi.unstubAllEnvs();
     vi.resetModules();
     const { detectDriver } = await import("./detect.js");
@@ -153,5 +153,35 @@ describe("detectDriver", () => {
     expect(driver.platform).toBe("noop");
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0]![1])).toMatch(/container/i);
+  });
+
+  it("is silent by default — no logger, no logLevel ⇒ nothing on the console", async () => {
+    vi.stubEnv("container", "podman");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.resetModules();
+    const { detectDriver } = await import("./detect.js");
+    const driver = detectDriver();
+    expect(driver.platform).toBe("noop");
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("logLevel:'warn' surfaces the container warning to the console sink (no logger)", async () => {
+    vi.stubEnv("container", "podman");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.resetModules();
+    const { detectDriver } = await import("./detect.js");
+    detectDriver({ logLevel: "warn" });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]!.join(" "))).toMatch(/container/i);
+  });
+
+  it("PERVIGIL_LOG_LEVEL surfaces warnings without a logger", async () => {
+    vi.stubEnv("container", "podman");
+    vi.stubEnv("PERVIGIL_LOG_LEVEL", "warn");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    vi.resetModules();
+    const { detectDriver } = await import("./detect.js");
+    detectDriver();
+    expect(warn).toHaveBeenCalledTimes(1);
   });
 });

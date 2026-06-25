@@ -1,7 +1,7 @@
-import type { DegradedReason, WakeLockDriver, WakeLockState } from "../types.js";
+import type { DegradedReason, Driver, WakeLockState } from "../types.js";
 
 /** A driver that does nothing — used on unsupported platforms / in containers. */
-export class NoopWakeLockDriver implements WakeLockDriver {
+export class NoopDriver implements Driver {
   readonly platform = "noop";
   readonly available = false;
   readonly degradedReason: DegradedReason;

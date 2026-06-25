@@ -2,9 +2,10 @@ import { WakeLockEngine } from "./core.js";
 import { detectDriver } from "./detect.js";
 import type {
   DegradedReason,
+  Driver,
+  Logger,
+  LogLevel,
   WakeAxis,
-  WakeLockDriver,
-  WakeLockLogger,
   WakeLockState,
   WakeReason,
 } from "./types.js";
@@ -64,11 +65,30 @@ export interface WakeLock {
   shutdown(): Promise<void>;
 }
 
-export interface CreateWakeLockOptions {
+export interface WakeLockOptions {
   /** Inject a driver. Default: {@link detectDriver} for the host platform. */
-  driver?: WakeLockDriver;
-  /** Optional logger passed to the default driver. */
-  logger?: WakeLockLogger;
+  driver?: Driver;
+  /**
+   * Sink for pervigil's log lines, passed to the default driver. Ignored when
+   * a `driver` is injected (that driver carries its own logger). Defaults to a
+   * built-in console sink, gated by {@link WakeLockOptions.logLevel}.
+   */
+  logger?: Logger;
+  /**
+   * Emission threshold for pervigil's own logs. Defaults to `silent` unless a
+   * `logger` is supplied. Also settable via `PERVIGIL_LOG_LEVEL`. Ignored when
+   * a `driver` is injected.
+   */
+  logLevel?: LogLevel;
+  /**
+   * Telemetry hook fired on every lifecycle event (`engaged`, `disengaged`,
+   * `reasonsChanged`, `primitiveDied`, `degraded`) with a fresh status
+   * snapshot — one place to forward to OpenTelemetry / StatsD / logs without
+   * subscribing to each event individually. A throwing handler is swallowed so
+   * it can never break the lock. Equivalent to calling {@link WakeLock.on} for
+   * each event.
+   */
+  onEvent?: (event: WakeLockEvent, status: WakeLockStatus) => void;
   /** Stable identity surfaced to the OS (systemd `--who=`, sysfs cookie). */
   identity?: string;
   /** Wall-clock source; injectable for tests. Default `Date.now`. */
@@ -88,7 +108,7 @@ const AXES: readonly WakeAxis[] = ["system", "display"];
  * reasons by key; the controller reconciles them onto the two independent
  * axes and drives the OS primitive, while tracking observability counters.
  */
-export function createWakeLock(opts: CreateWakeLockOptions = {}): WakeLock {
+export function wakeLock(opts: WakeLockOptions = {}): WakeLock {
   const now = opts.now ?? (() => Date.now());
   const listeners = new Map<WakeLockEvent, Set<(s: WakeLockStatus) => void>>();
   const holds = new Map<string, Hold>();
@@ -103,10 +123,11 @@ export function createWakeLock(opts: CreateWakeLockOptions = {}): WakeLock {
     display: null,
   };
 
-  const driver: WakeLockDriver =
+  const driver: Driver =
     opts.driver ??
     detectDriver({
       logger: opts.logger,
+      logLevel: opts.logLevel,
       identity: opts.identity,
       // Death notification is wired below via `driver.onPrimitiveDied(...)` for
       // every driver (injected or self-built), so we must NOT also pass the
@@ -148,15 +169,28 @@ export function createWakeLock(opts: CreateWakeLockOptions = {}): WakeLock {
     queueMicrotask(() => emit("degraded"));
   }
 
+  const onEvent = opts.onEvent;
+
   function emit(event: WakeLockEvent): void {
     const set = listeners.get(event);
-    if (!set || set.size === 0) return;
+    const hasListeners = set !== undefined && set.size > 0;
+    // Build the snapshot once, only if someone is listening.
+    if (!hasListeners && onEvent === undefined) return;
     const snapshot = status();
-    for (const cb of set) {
+    if (onEvent !== undefined) {
       try {
-        cb(snapshot);
+        onEvent(event, snapshot);
       } catch {
-        // A misbehaving listener must never break the lock.
+        // A misbehaving telemetry hook must never break the lock.
+      }
+    }
+    if (hasListeners) {
+      for (const cb of set) {
+        try {
+          cb(snapshot);
+        } catch {
+          // A misbehaving listener must never break the lock.
+        }
       }
     }
   }

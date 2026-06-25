@@ -1,9 +1,9 @@
 import * as fs from "node:fs";
 import * as cp from "node:child_process";
 import { killChild } from "../internal/kill-child.js";
-import type { DegradedReason, WakeLockDriver, WakeLockLogger, WakeLockState } from "../types.js";
+import type { DegradedReason, Driver, Logger, WakeLockState } from "../types.js";
 
-export interface LinuxWakeLockDriverOptions {
+export interface LinuxDriverOptions {
   /** Override systemd-inhibit binary path. For tests. */
   systemdInhibitPath?: string;
   /** Override sysfs paths. For tests. */
@@ -12,7 +12,7 @@ export interface LinuxWakeLockDriverOptions {
   /** Force a specific backend for tests. */
   forceBackend?: "systemd-inhibit" | "sysfs" | "noop";
   /** Optional logger. */
-  logger?: WakeLockLogger;
+  logger?: Logger;
   /** Identity surfaced to logind (`--who=`) and used as the sysfs cookie. */
   identity?: string;
   /** Invoked when the systemd-inhibit child dies unexpectedly. */
@@ -59,10 +59,10 @@ function inhibitWhat(state: WakeLockState): string | null {
   return parts.join(":");
 }
 
-const NOOP_LOGGER: WakeLockLogger = { warn: () => undefined };
+const NOOP_LOGGER: Logger = { warn: () => undefined };
 
 /** Linux driver backed by `systemd-inhibit(1)` or `/sys/power/wake_lock`. */
-export class LinuxWakeLockDriver implements WakeLockDriver {
+export class LinuxDriver implements Driver {
   readonly platform: string;
   readonly available: boolean;
   readonly degradedReason: DegradedReason;
@@ -71,7 +71,7 @@ export class LinuxWakeLockDriver implements WakeLockDriver {
   private readonly systemdInhibitPath: string;
   private readonly sysfsWakeLockPath: string;
   private readonly sysfsWakeUnlockPath: string;
-  private readonly logger: WakeLockLogger;
+  private readonly logger: Logger;
   private readonly identity: string;
   private readonly diedCallbacks: (() => void)[] = [];
 
@@ -81,7 +81,7 @@ export class LinuxWakeLockDriver implements WakeLockDriver {
   private sysfsEngaged = false;
   private _restarts = 0;
 
-  constructor(opts: LinuxWakeLockDriverOptions = {}) {
+  constructor(opts: LinuxDriverOptions = {}) {
     this.systemdInhibitPath = opts.systemdInhibitPath ?? "/usr/bin/systemd-inhibit";
     this.sysfsWakeLockPath = opts.sysfsWakeLockPath ?? "/sys/power/wake_lock";
     this.sysfsWakeUnlockPath = opts.sysfsWakeUnlockPath ?? "/sys/power/wake_unlock";

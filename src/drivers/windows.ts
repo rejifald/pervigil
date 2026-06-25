@@ -1,13 +1,13 @@
 import { existsSync } from "node:fs";
 import { execSync, spawn, type ChildProcess } from "node:child_process";
 import { killChild } from "../internal/kill-child.js";
-import type { DegradedReason, WakeLockDriver, WakeLockLogger, WakeLockState } from "../types.js";
+import type { DegradedReason, Driver, Logger, WakeLockState } from "../types.js";
 
-export interface WindowsWakeLockDriverOptions {
+export interface WindowsDriverOptions {
   /** Override the PowerShell binary path. Default: auto-probe. For tests. */
   powershellPath?: string;
   /** Optional logger. */
-  logger?: WakeLockLogger;
+  logger?: Logger;
   /**
    * Accepted for API symmetry with the Linux driver; `SetThreadExecutionState`
    * has no equivalent of an identity string, so it is currently unused.
@@ -97,19 +97,19 @@ function powershellCommand(flagNames: string[]): string {
 }
 
 /** Windows driver backed by `SetThreadExecutionState` via PowerShell. */
-export class WindowsWakeLockDriver implements WakeLockDriver {
+export class WindowsDriver implements Driver {
   readonly platform: string;
   readonly available: boolean;
   readonly degradedReason: DegradedReason;
 
   private readonly _powershellPath: string;
-  private readonly _logger: WakeLockLogger | undefined;
+  private readonly _logger: Logger | undefined;
   private readonly _diedCallbacks: (() => void)[] = [];
   private _child: ChildProcess | null = null;
   private _currentFlags: string | null = null;
   private _restarts = 0;
 
-  constructor(opts: WindowsWakeLockDriverOptions = {}) {
+  constructor(opts: WindowsDriverOptions = {}) {
     this._logger = opts.logger;
     if (opts.onPrimitiveDied) this._diedCallbacks.push(opts.onPrimitiveDied);
 

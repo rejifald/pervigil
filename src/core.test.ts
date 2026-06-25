@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { WakeLockEngine } from "./core.js";
-import { MockWakeLockDriver } from "./drivers/mock.js";
+import { MockDriver } from "./drivers/mock.js";
 import type { WakeReason } from "./types.js";
 
 function reason(key: string, description?: string): WakeReason {
@@ -8,11 +8,11 @@ function reason(key: string, description?: string): WakeReason {
 }
 
 describe("WakeLockEngine", () => {
-  let driver: MockWakeLockDriver;
+  let driver: MockDriver;
   let engine: WakeLockEngine;
 
   beforeEach(() => {
-    driver = new MockWakeLockDriver();
+    driver = new MockDriver();
     engine = new WakeLockEngine(driver);
   });
 

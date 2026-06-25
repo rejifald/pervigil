@@ -1,11 +1,11 @@
 import {
-  createWakeLock,
-  type CreateWakeLockOptions,
+  wakeLock,
+  type WakeLockOptions,
   type WakeLock,
   type WakeLockStatus,
 } from "./controller.js";
 
-export interface KeepAwakeOptions extends CreateWakeLockOptions {
+export interface KeepAwakeOptions extends WakeLockOptions {
   /** Block system sleep. Default `true`. */
   system?: boolean;
   /** Block display sleep. Default `false`. */
@@ -71,7 +71,7 @@ interface KeepAwakeFn {
 
 /**
  * Acquire a wake lock and get a handle to release it. The simple, one-shot
- * entry point; for multi-reason coordination use {@link createWakeLock}.
+ * entry point; for multi-reason coordination use {@link wakeLock}.
  *
  * ```ts
  * const lock = await keepAwake({ system: true, reason: "nightly backup" });
@@ -83,7 +83,7 @@ export const keepAwake: KeepAwakeFn = async function keepAwake(
   opts: KeepAwakeOptions = {},
 ): Promise<WakeLockHandle> {
   const { system = true, display = false, reason, ...controllerOpts } = opts;
-  const wl = createWakeLock(controllerOpts);
+  const wl = wakeLock(controllerOpts);
   await wl.acquire(HANDLE_KEY, { system, display, description: reason ?? HANDLE_KEY });
   return {
     release: () => wl.shutdown(),
@@ -165,7 +165,7 @@ keepAwake.shared = async function keepAwakeShared(
 
   // Lazily create the shared controller from the FIRST call's controller
   // options; later calls reuse it and their controller options are ignored.
-  sharedLock ??= createWakeLock(controllerOpts);
+  sharedLock ??= wakeLock(controllerOpts);
   const wl = sharedLock;
 
   const key = `keep-awake-shared:${(sharedKeyCounter += 1)}`;

@@ -12,10 +12,10 @@ import type { WakeLockStatus } from "./controller.js";
  *
  * @example Expose a `/metrics` endpoint (any HTTP framework).
  * ```ts
- * import { createWakeLock } from "pervigil";
+ * import { wakeLock } from "pervigil";
  * import { toPrometheus } from "pervigil/metrics";
  *
- * const lock = createWakeLock();
+ * const lock = wakeLock();
  * // ...later, in a request handler:
  * res.setHeader("content-type", "text/plain; version=0.0.4");
  * res.end(toPrometheus(lock));

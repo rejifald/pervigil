@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from "vitest";
 import { EventEmitter } from "node:events";
-import { autoReleaseOnExit } from "./auto-release.js";
+import { releaseOnExit } from "./auto-release.js";
 
-describe("autoReleaseOnExit", () => {
+describe("releaseOnExit", () => {
   it("calls shutdown once when a registered signal fires", () => {
     const emitter = new EventEmitter();
     const target = { shutdown: vi.fn() };
 
-    autoReleaseOnExit(target, { emitter, signals: ["SIGTERM"] });
+    releaseOnExit(target, { emitter, signals: ["SIGTERM"] });
     emitter.emit("SIGTERM");
 
     expect(target.shutdown).toHaveBeenCalledTimes(1);
@@ -17,7 +17,7 @@ describe("autoReleaseOnExit", () => {
     const emitter = new EventEmitter();
     const target = { shutdown: vi.fn() };
 
-    autoReleaseOnExit(target, { emitter, signals: ["SIGINT", "SIGTERM"] });
+    releaseOnExit(target, { emitter, signals: ["SIGINT", "SIGTERM"] });
     emitter.emit("SIGTERM");
     emitter.emit("SIGTERM");
     emitter.emit("SIGINT");
@@ -29,7 +29,7 @@ describe("autoReleaseOnExit", () => {
     const emitter = new EventEmitter();
     const target = { shutdown: vi.fn() };
 
-    autoReleaseOnExit(target, { emitter });
+    releaseOnExit(target, { emitter });
     emitter.emit("beforeExit", 0);
 
     expect(target.shutdown).toHaveBeenCalledTimes(1);
@@ -39,7 +39,7 @@ describe("autoReleaseOnExit", () => {
     const emitter = new EventEmitter();
     const target = { shutdown: vi.fn() };
 
-    const unregister = autoReleaseOnExit(target, {
+    const unregister = releaseOnExit(target, {
       emitter,
       signals: ["SIGINT", "SIGTERM"],
     });
@@ -62,7 +62,7 @@ describe("autoReleaseOnExit", () => {
     const emitter = new EventEmitter();
     const target = { shutdown: vi.fn() };
 
-    autoReleaseOnExit(target, { emitter });
+    releaseOnExit(target, { emitter });
     emitter.emit("SIGINT");
 
     expect(target.shutdown).toHaveBeenCalledTimes(1);

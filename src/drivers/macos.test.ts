@@ -59,7 +59,7 @@ vi.mock("node:fs", async (importOriginal) => {
 
 // ---- tests ------------------------------------------------------------------
 
-describe("MacOSWakeLockDriver", () => {
+describe("MacOSDriver", () => {
   let fakeChild: ReturnType<typeof makeFakeChild>;
 
   beforeEach(() => {
@@ -83,8 +83,8 @@ describe("MacOSWakeLockDriver", () => {
       if (opts?.caffeinatePath) return p === opts.caffeinatePath;
       return opts?.exists ?? true;
     });
-    const { MacOSWakeLockDriver } = await import("./macos.js");
-    return new MacOSWakeLockDriver({
+    const { MacOSDriver } = await import("./macos.js");
+    return new MacOSDriver({
       caffeinatePath: opts?.caffeinatePath ?? "/usr/bin/caffeinate",
       logger: opts?.logger,
     });
@@ -99,8 +99,8 @@ describe("MacOSWakeLockDriver", () => {
 
   it("missing caffeinate → available=false, platform=macos-noop, degradedReason=missing-binary", async () => {
     mockExistsSync.mockReturnValue(false);
-    const { MacOSWakeLockDriver } = await import("./macos.js");
-    const driver = new MacOSWakeLockDriver({ caffeinatePath: "/nonexistent/caffeinate" });
+    const { MacOSDriver } = await import("./macos.js");
+    const driver = new MacOSDriver({ caffeinatePath: "/nonexistent/caffeinate" });
     expect(driver.available).toBe(false);
     expect(driver.platform).toBe("macos-noop");
     expect(driver.degradedReason).toBe("missing-binary");
@@ -109,8 +109,8 @@ describe("MacOSWakeLockDriver", () => {
   it("missing caffeinate logs one warning with operator-facing remediation", async () => {
     mockExistsSync.mockReturnValue(false);
     const warn = vi.fn();
-    const { MacOSWakeLockDriver } = await import("./macos.js");
-    new MacOSWakeLockDriver({ caffeinatePath: "/nonexistent/caffeinate", logger: { warn } });
+    const { MacOSDriver } = await import("./macos.js");
+    new MacOSDriver({ caffeinatePath: "/nonexistent/caffeinate", logger: { warn } });
     expect(warn).toHaveBeenCalledTimes(1);
     const [, msg] = warn.mock.calls[0]!;
     expect(String(msg)).toMatch(/caffeinate/i);

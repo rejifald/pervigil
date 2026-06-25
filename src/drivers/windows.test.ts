@@ -66,7 +66,7 @@ vi.mock("node:fs", async (importOriginal) => {
 
 // ---- tests ------------------------------------------------------------------
 
-describe("WindowsWakeLockDriver", () => {
+describe("WindowsDriver", () => {
   let fakeChild: ReturnType<typeof makeFakeChild>;
 
   beforeEach(() => {
@@ -90,8 +90,8 @@ describe("WindowsWakeLockDriver", () => {
       if (opts?.powershellPath) return p === opts.powershellPath;
       return opts?.exists ?? true;
     });
-    const { WindowsWakeLockDriver } = await import("./windows.js");
-    return new WindowsWakeLockDriver({
+    const { WindowsDriver } = await import("./windows.js");
+    return new WindowsDriver({
       powershellPath: opts?.powershellPath ?? "C:/Windows/System32/powershell.exe",
       logger: opts?.logger,
     });
@@ -109,8 +109,8 @@ describe("WindowsWakeLockDriver", () => {
 
   it("missing PowerShell → available=false, platform=windows-noop, degradedReason=missing-binary", async () => {
     mockExistsSync.mockReturnValue(false);
-    const { WindowsWakeLockDriver } = await import("./windows.js");
-    const driver = new WindowsWakeLockDriver({ powershellPath: "C:/nope/powershell.exe" });
+    const { WindowsDriver } = await import("./windows.js");
+    const driver = new WindowsDriver({ powershellPath: "C:/nope/powershell.exe" });
     expect(driver.available).toBe(false);
     expect(driver.platform).toBe("windows-noop");
     expect(driver.degradedReason).toBe("missing-binary");
@@ -119,8 +119,8 @@ describe("WindowsWakeLockDriver", () => {
   it("missing PowerShell logs exactly one warning with operator-facing remediation", async () => {
     mockExistsSync.mockReturnValue(false);
     const warn = vi.fn();
-    const { WindowsWakeLockDriver } = await import("./windows.js");
-    new WindowsWakeLockDriver({ powershellPath: "C:/nope/powershell.exe", logger: { warn } });
+    const { WindowsDriver } = await import("./windows.js");
+    new WindowsDriver({ powershellPath: "C:/nope/powershell.exe", logger: { warn } });
     expect(warn).toHaveBeenCalledTimes(1);
     const [, msg] = warn.mock.calls[0]!;
     expect(String(msg)).toMatch(/powershell|sleep inhibitor/i);
@@ -198,8 +198,8 @@ describe("WindowsWakeLockDriver", () => {
     const warn = vi.fn();
     const onPrimitiveDied = vi.fn();
     mockExistsSync.mockReturnValue(true);
-    const { WindowsWakeLockDriver } = await import("./windows.js");
-    const driver = new WindowsWakeLockDriver({
+    const { WindowsDriver } = await import("./windows.js");
+    const driver = new WindowsDriver({
       powershellPath: "C:/Windows/System32/powershell.exe",
       logger: { warn },
       onPrimitiveDied,
@@ -238,8 +238,8 @@ describe("WindowsWakeLockDriver", () => {
 
   it("setState is a no-op when the driver is unavailable", async () => {
     mockExistsSync.mockReturnValue(false);
-    const { WindowsWakeLockDriver } = await import("./windows.js");
-    const driver = new WindowsWakeLockDriver({ powershellPath: "C:/nope/powershell.exe" });
+    const { WindowsDriver } = await import("./windows.js");
+    const driver = new WindowsDriver({ powershellPath: "C:/nope/powershell.exe" });
     await driver.setState({ system: true, display: true }, "reason");
     expect(mockSpawn).not.toHaveBeenCalled();
   });

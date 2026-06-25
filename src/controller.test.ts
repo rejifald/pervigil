@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createWakeLock } from "./controller.js";
-import { MockWakeLockDriver } from "./drivers/mock.js";
-import { NoopWakeLockDriver } from "./drivers/noop.js";
-import type { DegradedReason, WakeLockDriver, WakeLockState } from "./types.js";
+import { wakeLock } from "./controller.js";
+import { MockDriver } from "./drivers/mock.js";
+import { NoopDriver } from "./drivers/noop.js";
+import type { DegradedReason, Driver, WakeLockState } from "./types.js";
 
 const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -12,7 +12,7 @@ const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
  * controller did not serialize, overlapping calls would push
  * `maxConcurrentSetState` above 1 and leave torn state behind.
  */
-class DelayedDriver implements WakeLockDriver {
+class DelayedDriver implements Driver {
   readonly platform = "delayed";
   readonly available = true;
   readonly degradedReason: DegradedReason = null;
@@ -36,7 +36,7 @@ class DelayedDriver implements WakeLockDriver {
 }
 
 /** A driver that can be told to reject its next `setState`. */
-class FlakyDriver implements WakeLockDriver {
+class FlakyDriver implements Driver {
   readonly platform = "flaky";
   readonly available = true;
   readonly degradedReason: DegradedReason = null;
@@ -57,15 +57,15 @@ class FlakyDriver implements WakeLockDriver {
   }
 }
 
-describe("createWakeLock", () => {
-  let driver: MockWakeLockDriver;
+describe("wakeLock", () => {
+  let driver: MockDriver;
 
   beforeEach(() => {
-    driver = new MockWakeLockDriver();
+    driver = new MockDriver();
   });
 
   it("acquire(system) engages the system axis only", async () => {
-    const wl = createWakeLock({ driver });
+    const wl = wakeLock({ driver });
     await wl.acquire("job", { system: true, description: "import" });
 
     const s = wl.status();
@@ -76,13 +76,13 @@ describe("createWakeLock", () => {
   });
 
   it("defaults to the system axis only", async () => {
-    const wl = createWakeLock({ driver });
+    const wl = wakeLock({ driver });
     await wl.acquire("job");
     expect(wl.status().engaged).toEqual({ system: true, display: false });
   });
 
   it("holds are independent — releasing one keeps the other", async () => {
-    const wl = createWakeLock({ driver });
+    const wl = wakeLock({ driver });
     await wl.acquire("job", { system: true });
     await wl.acquire("view", { display: true });
     expect(wl.status().engaged).toEqual({ system: true, display: true });
@@ -92,13 +92,13 @@ describe("createWakeLock", () => {
   });
 
   it("releasing an unknown key is a no-op", async () => {
-    const wl = createWakeLock({ driver });
+    const wl = wakeLock({ driver });
     await wl.release("nope");
     expect(driver.setStateCalls).toHaveLength(0);
   });
 
   it("counts engageTransitions as false→true edges", async () => {
-    const wl = createWakeLock({ driver });
+    const wl = wakeLock({ driver });
     await wl.acquire("a", { system: true });
     await wl.release("a");
     await wl.acquire("b", { system: true });
@@ -107,7 +107,7 @@ describe("createWakeLock", () => {
 
   it("accumulates awakeMsTotal across the hold using an injected clock", async () => {
     let t = 1000;
-    const wl = createWakeLock({ driver, now: () => t });
+    const wl = wakeLock({ driver, now: () => t });
     await wl.acquire("a", { system: true });
     t = 1500;
     await wl.release("a");
@@ -116,14 +116,14 @@ describe("createWakeLock", () => {
 
   it("status() includes the live (not-yet-released) span", async () => {
     let t = 1000;
-    const wl = createWakeLock({ driver, now: () => t });
+    const wl = wakeLock({ driver, now: () => t });
     await wl.acquire("a", { system: true });
     t = 1200;
     expect(wl.status().counters.awakeMsTotal.system).toBe(200);
   });
 
   it("emits engaged then disengaged", async () => {
-    const wl = createWakeLock({ driver });
+    const wl = wakeLock({ driver });
     const events: string[] = [];
     wl.on("engaged", () => events.push("engaged"));
     wl.on("disengaged", () => events.push("disengaged"));
@@ -133,7 +133,7 @@ describe("createWakeLock", () => {
   });
 
   it("on() returns a working unsubscribe", async () => {
-    const wl = createWakeLock({ driver });
+    const wl = wakeLock({ driver });
     let n = 0;
     const off = wl.on("engaged", () => {
       n += 1;
@@ -144,7 +144,7 @@ describe("createWakeLock", () => {
   });
 
   it("surfaces a degraded driver via status() and the degraded event", async () => {
-    const wl = createWakeLock({ driver: new NoopWakeLockDriver("container") });
+    const wl = wakeLock({ driver: new NoopDriver("container") });
     const seen: string[] = [];
     wl.on("degraded", () => seen.push("degraded"));
     await new Promise<void>((resolve) => queueMicrotask(() => resolve()));
@@ -156,14 +156,14 @@ describe("createWakeLock", () => {
   });
 
   it("shutdown tears down the driver", async () => {
-    const wl = createWakeLock({ driver });
+    const wl = wakeLock({ driver });
     await wl.acquire("a", { system: true });
     await wl.shutdown();
     expect(driver.shutdownCalls.length).toBeGreaterThan(0);
   });
 
   it("a both-axes acquire from idle makes exactly one setState with no intermediate state", async () => {
-    const wl = createWakeLock({ driver });
+    const wl = wakeLock({ driver });
     await wl.acquire("job", { system: true, display: true, description: "import" });
 
     expect(driver.setStateCalls).toHaveLength(1);
@@ -178,7 +178,7 @@ describe("createWakeLock", () => {
     // A driver whose I/O is deliberately delayed, so un-serialized operations
     // would interleave with an in-flight setState and tear state apart.
     const delayed = new DelayedDriver();
-    const wl = createWakeLock({ driver: delayed });
+    const wl = wakeLock({ driver: delayed });
 
     // Fire several overlapping ops WITHOUT awaiting between them.
     const ops = [
@@ -212,7 +212,7 @@ describe("createWakeLock", () => {
 
   it("a rejected op does not break the queue for subsequent ops", async () => {
     const flaky = new FlakyDriver();
-    const wl = createWakeLock({ driver: flaky });
+    const wl = wakeLock({ driver: flaky });
 
     flaky.failNext = true;
     const failing = wl.acquire("bad", { system: true });
@@ -226,7 +226,7 @@ describe("createWakeLock", () => {
   });
 
   it("fires primitiveDied + bumps primitiveRestarts for an INJECTED driver", async () => {
-    const wl = createWakeLock({ driver });
+    const wl = wakeLock({ driver });
     const seen: string[] = [];
     wl.on("primitiveDied", () => seen.push("primitiveDied"));
 
@@ -235,5 +235,61 @@ describe("createWakeLock", () => {
 
     expect(seen).toEqual(["primitiveDied"]);
     expect(wl.status().counters.primitiveRestarts).toBe(1);
+  });
+
+  describe("onEvent telemetry hook", () => {
+    it("fires for every lifecycle event with (event, status)", async () => {
+      const events: { event: string; engaged: WakeLockState }[] = [];
+      const wl = wakeLock({
+        driver,
+        onEvent: (event, status) => events.push({ event, engaged: status.engaged }),
+      });
+
+      await wl.acquire("job", { system: true });
+      await wl.release("job");
+
+      const names = events.map((e) => e.event);
+      // acquire: engine flips system on (engaged) then acquire emits reasonsChanged;
+      // release: engine flips system off (disengaged) then reasonsChanged.
+      expect(names).toEqual(["engaged", "reasonsChanged", "disengaged", "reasonsChanged"]);
+      // The snapshot reflects the state at emit time.
+      expect(events[0]!.engaged).toEqual({ system: true, display: false });
+      expect(events[3]!.engaged).toEqual({ system: false, display: false });
+    });
+
+    it("fires for primitiveDied", async () => {
+      const seen: string[] = [];
+      const wl = wakeLock({ driver, onEvent: (event) => seen.push(event) });
+      await wl.acquire("a", { system: true });
+      driver.simulatePrimitiveDeath();
+      expect(seen).toContain("primitiveDied");
+    });
+
+    it("fires 'degraded' for an unavailable driver", async () => {
+      const seen: string[] = [];
+      wakeLock({
+        driver: new NoopDriver("forced"),
+        onEvent: (event) => seen.push(event),
+      });
+      // `degraded` is surfaced on a microtask so callers can attach listeners
+      // synchronously after construction; flush the queue.
+      await tick();
+      expect(seen).toContain("degraded");
+    });
+
+    it("a throwing onEvent never breaks the lock and still notifies .on listeners", async () => {
+      const seen: string[] = [];
+      const wl = wakeLock({
+        driver,
+        onEvent: () => {
+          throw new Error("telemetry backend down");
+        },
+      });
+      wl.on("engaged", () => seen.push("engaged"));
+
+      await expect(wl.acquire("job", { system: true })).resolves.toBeUndefined();
+      expect(wl.status().engaged.system).toBe(true);
+      expect(seen).toEqual(["engaged"]);
+    });
   });
 });
