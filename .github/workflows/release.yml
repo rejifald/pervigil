@@ -1,0 +1,86 @@
+name: Release
+
+# Publishes to npm when a version tag is pushed (e.g. `v0.2.0`).
+#
+# Authentication uses npm Trusted Publishing (OIDC) as the preferred path:
+#   1. On npmjs.com → the pervigil package → Settings → Trusted Publishing,
+#      add this repo's `release.yml` workflow as a trusted publisher.
+#   2. With that configured, no NPM_TOKEN secret is needed — the `id-token`
+#      permission below lets npm mint a short-lived token and attach build
+#      provenance automatically.
+#
+# Fallback: if Trusted Publishing is not configured, set an `NPM_TOKEN`
+# repository secret (an automation token) and it is used instead. `--provenance`
+# still works because `id-token: write` is granted.
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# Least privilege at the top level; the publish job widens what it needs.
+permissions:
+  contents: read
+
+jobs:
+  # Gate the release on the exact same matrix CI that guards `main`.
+  verify:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write # create the GitHub Release
+      id-token: write # npm Trusted Publishing (OIDC) + build provenance
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: "https://registry.npmjs.org"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Trusted Publishing (OIDC) requires npm >= 11.5.1, newer than the npm
+      # bundled with Node 22.
+      - name: Upgrade npm for Trusted Publishing
+        run: npm install --global npm@latest
+
+      - name: Verify tag matches package.json version
+        shell: bash
+        run: |
+          PKG="$(node -p "require('./package.json').version")"
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "package.json=$PKG tag=$TAG"
+          if [ "$PKG" != "$TAG" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match package.json version ${PKG}"
+            exit 1
+          fi
+
+      - name: Build
+        run: pnpm run build
+
+      # Build already ran above; skip lifecycle scripts so `prepublishOnly`
+      # doesn't rebuild a second time.
+      - name: Publish to npm
+        run: npm publish --provenance --access public --ignore-scripts
+        env:
+          # Only consulted when Trusted Publishing is not configured; harmless
+          # (empty) otherwise, as OIDC takes precedence.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
+            echo "Release ${GITHUB_REF_NAME} already exists — leaving it as-is."
+          else
+            gh release create "${GITHUB_REF_NAME}" --verify-tag --generate-notes
+          fi
