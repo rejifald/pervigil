@@ -6,6 +6,33 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-25
+
+### Added
+
+- `status().active` — the truth of whether a real OS assertion is in effect
+  **right now**, distinct from `available` (the driver is capable) and `engaged`
+  (a reason is desired). Goes `false` when degraded, when nothing is held, or
+  when the primitive died and hasn't re-engaged. Backed by a new optional
+  `Driver.held` getter (implemented by all built-in drivers + the mock).
+- `strict` option on `wakeLock` / `keepAwake`. When `true`, `acquire` rejects
+  with the new `WakeLockUnavailableError` (carrying `degradedReason` + `platform`)
+  instead of degrading to a silent no-op — for jobs that must not run unless the
+  host is genuinely kept awake. Default stays a graceful, never-throwing no-op.
+- `pervigil_active` gauge in `pervigil/metrics` — the "is the host actually
+  awake right now" signal to alert on.
+
+### Changed
+
+- **BREAKING:** `keepAwake`'s human-text option is now `description` (was
+  `reason`), unifying on one term — `reason`/`WakeReason` is the keyed entry,
+  `description` is its label (as `acquire` already used).
+- **BREAKING:** `keepAwake.shared()` now accepts only the per-call axes
+  (`system` / `display` / `description`), not controller config. The shared
+  instance is always default-configured, removing the first-caller-wins config
+  footgun. Need a configured controller? Create your own `wakeLock()` and share
+  the reference.
+
 ## [0.3.0] - 2026-06-25
 
 ### Changed

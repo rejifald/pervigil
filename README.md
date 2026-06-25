@@ -44,7 +44,7 @@ npm install pervigil
 ```ts
 import { keepAwake } from "pervigil";
 
-const lock = await keepAwake({ system: true, reason: "nightly backup" });
+const lock = await keepAwake({ system: true, description: "nightly backup" });
 try {
   await runLongJob();
 } finally {
@@ -57,13 +57,13 @@ Scoped variant — auto-releases even if the callback throws:
 ```ts
 import { keepAwake } from "pervigil";
 
-await keepAwake.while({ system: true, reason: "backup" }, runLongJob);
+await keepAwake.while({ system: true, description: "backup" }, runLongJob);
 ```
 
 Or with explicit resource management (Node 20.4+ / TS 5.2+):
 
 ```ts
-await using lock = await keepAwake({ display: true, reason: "rendering preview" });
+await using lock = await keepAwake({ display: true, description: "rendering preview" });
 ```
 
 By default only **system** sleep is blocked. Pass `display: true` to also keep
@@ -76,7 +76,7 @@ auto-release runs on an `unref()`'d timer (so it never keeps the event loop
 alive), and an early `release()` cancels it — it never double-releases:
 
 ```ts
-const lock = await keepAwake.for({ system: true, reason: "warm-up" }, 30_000);
+const lock = await keepAwake.for({ system: true, description: "warm-up" }, 30_000);
 const lock2 = await keepAwake.until({ display: true }, new Date(Date.now() + 60_000));
 ```
 
@@ -88,12 +88,17 @@ not N. Each handle's `release()` removes only its own hold; call
 `keepAwake.shutdownShared()` to tear the shared primitive down (e.g. on exit):
 
 ```ts
-const a = await keepAwake.shared({ reason: "task a" });
-const b = await keepAwake.shared({ reason: "task b" }); // reuses a's primitive
+const a = await keepAwake.shared({ description: "task a" });
+const b = await keepAwake.shared({ description: "task b" }); // reuses a's primitive
 await a.release();
 await b.release();
 await keepAwake.shutdownShared();
 ```
+
+`shared()` takes only the per-call axes (`system` / `display` / `description`) —
+**not** controller config — so the shared instance is always default-configured
+(no first-caller-wins surprise). If you need a custom `identity` / `logger` /
+`strict` / injected `driver`, create your own `wakeLock()` and share the reference.
 
 ### Auto-release on process exit
 
@@ -137,9 +142,10 @@ wl.on("degraded", (s) => console.warn("no-op:", s.degradedReason));
 wl.status();
 // {
 //   platform: "macos-caffeinate",
-//   available: true,
+//   available: true,                       // the driver is capable
+//   active: true,                          // a real assertion is in effect RIGHT NOW
 //   degradedReason: null,
-//   engaged: { system: true, display: false },
+//   engaged: { system: true, display: false },  // intent (a reason is desired)
 //   reasons: { system: [{ key: "job:123", description: "import job 123" }], display: [] },
 //   since: { system: 1718900000000, display: null },
 //   counters: {
@@ -172,6 +178,50 @@ Linux (`systemd-inhibit --who=`, or the sysfs wake-lock cookie) and tags it on
 Windows, but has no effect on macOS — `caffeinate(1)` exposes no equivalent, so
 the value is silently ignored there.
 
+## Is the host actually being kept awake?
+
+Because pervigil degrades to a silent no-op where it can't help, "I called
+`keepAwake`" is **not** the same as "the host is awake." Three status fields
+separate the three questions:
+
+| Field | Question |
+| --- | --- |
+| `available` | Is the driver *capable* of a real primitive? (false ⇒ no-op) |
+| `engaged` | Is a reason *desired* on this axis? (intent) |
+| `active` | Is a real OS assertion in effect **right now**? (reality) |
+
+`active` is the truth: it's `false` when degraded, when nothing is held, **and**
+when the OS primitive died and hasn't re-engaged yet — cases `available` and
+`engaged` can't distinguish.
+
+```ts
+const lock = await keepAwake({ description: "backup" });
+if (!lock.status().active) {
+  log.warn("running without a wake lock — host may sleep");
+}
+```
+
+**Or fail loud.** If your job genuinely must not run unless the host stays awake,
+pass `strict: true` and pervigil throws `WakeLockUnavailableError` instead of
+no-op'ing:
+
+```ts
+import { keepAwake, WakeLockUnavailableError } from "pervigil";
+
+try {
+  await keepAwake({ description: "backup", strict: true });
+} catch (err) {
+  if (err instanceof WakeLockUnavailableError) {
+    console.error(`can't keep awake: ${err.degradedReason} on ${err.platform}`);
+    process.exit(1);
+  }
+}
+```
+
+`strict` is opt-in — the default stays a graceful, never-throwing no-op. For
+long-running locks, watch the `degraded` / `primitiveDied` events (or `onEvent`)
+to learn when `active` flips to `false`.
+
 ## Metrics
 
 `pervigil/metrics` turns the cumulative counters into Prometheus text or a
@@ -194,8 +244,10 @@ for (const s of collectMetrics(wl)) {
 }
 ```
 
-Emits `pervigil_available`, `pervigil_awake{axis}`, `pervigil_awake_ms_total{axis}`,
-`pervigil_engage_transitions_total{axis}`, and `pervigil_primitive_restarts_total`.
+Emits `pervigil_available`, `pervigil_active`, `pervigil_awake{axis}`,
+`pervigil_awake_ms_total{axis}`, `pervigil_engage_transitions_total{axis}`, and
+`pervigil_primitive_restarts_total`. (`pervigil_active` is the "is the host
+actually awake right now" gauge — the one to alert on.)
 
 ### OpenTelemetry
 
