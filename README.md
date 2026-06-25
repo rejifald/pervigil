@@ -21,6 +21,9 @@ machine awake while long jobs run.
   throwing, so your job always runs. Opt into **fail-fast** with `strict`, or
   read `.active` for the truth.
 - **Supervised** — if the OS primitive dies, it re-engages on the next change.
+- **Self-cleaning** — releases the OS primitive automatically when the process
+  exits, so a forgotten `release()` never leaks an orphaned `caffeinate` /
+  `systemd-inhibit` child. Opt out with `autoRelease: false`.
 - **Observable** — a `status()` snapshot plus counters and events answer *"is the
   host awake, why, on what backend, and for how long?"*
 - **Typed & testable** — first-class TypeScript, an injectable driver, and a
@@ -69,7 +72,9 @@ await using lock = await keepAwake({ display: true, description: "rendering prev
 ```
 
 By default only **system** sleep is blocked. Pass `display: true` to also keep
-the screen on.
+the screen on. And if you ever forget the `finally` / `release()`, the lock is
+still freed when the process exits — see
+[Auto-release on process exit](#auto-release-on-process-exit).
 
 ### Timed windows
 
