@@ -24,6 +24,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- **Auto-release on process exit is now the default.** A forgotten `shutdown()`
+  no longer leaks an orphaned `caffeinate` / `systemd-inhibit` / PowerShell
+  child: every lock tears its primitive down via a single shared `process`
+  `"exit"` handler (no signal listeners, so Ctrl-C is unaffected). Opt out with
+  `autoRelease: false`. The `releaseOnExit()` helper remains for explicit
+  `SIGINT` / `SIGTERM` coverage.
 - **BREAKING:** `keepAwake`'s human-text option is now `description` (was
   `reason`), unifying on one term — `reason`/`WakeReason` is the keyed entry,
   `description` is its label (as `acquire` already used).

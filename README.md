@@ -104,16 +104,30 @@ await keepAwake.shutdownShared();
 
 ### Auto-release on process exit
 
-`releaseOnExit` releases any lock-like object (anything with `shutdown()`)
-on `beforeExit` and on `SIGINT` / `SIGTERM`, exactly once. It returns an
-unregister function so you can hand teardown back to your own signal handlers:
+You don't need to do anything for this. **By default, every lock releases its OS
+primitive when the process exits** — so a forgotten `release()` / `shutdown()`
+can't leave an orphaned `caffeinate` / `systemd-inhibit` / PowerShell child
+keeping the machine awake. It's wired with a single shared `process` `"exit"`
+handler (never a `SIGINT`/`SIGTERM` listener, so it can't interfere with Ctrl-C
+or your own signal handling), covering normal exit, `process.exit()`, and Ctrl-C.
+
+Opt out per lock with `autoRelease: false` if you want to own teardown entirely:
+
+```ts
+const wl = wakeLock({ autoRelease: false });
+```
+
+The one gap is `SIGTERM` delivered straight to the Node process (it bypasses the
+`exit` event). Under systemd / containers the whole process group is signalled,
+so the child dies anyway; for a bare `kill <pid>` daemon, add explicit signal
+coverage with `releaseOnExit`, which also handles `SIGINT` / `SIGTERM`:
 
 ```ts
 import { wakeLock, releaseOnExit } from "pervigil";
 
 const wl = wakeLock();
-const stop = releaseOnExit(wl); // wl.shutdown() runs on exit / Ctrl-C
-// ... later, if you take over shutdown yourself:
+const stop = releaseOnExit(wl); // also shut down on SIGINT / SIGTERM
+// ... later, if you take over signal handling yourself:
 stop();
 ```
 
