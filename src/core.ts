@@ -38,11 +38,30 @@ export class WakeLockEngine {
   async applyAxis(axis: WakeAxis, next: readonly WakeReason[]): Promise<void> {
     if (this.shutdown_) return;
     const target = axis === "system" ? this.system : this.display;
+    this.replaceReasons(target, next);
+    await this.flush();
+  }
+
+  /**
+   * Replace BOTH axis reason sets and reconcile the driver exactly once. A
+   * change that touches both axes therefore drives a single `setState`,
+   * avoiding a wrong intermediate state and a needless OS-primitive respawn.
+   */
+  async applyAxes(
+    system: readonly WakeReason[],
+    display: readonly WakeReason[],
+  ): Promise<void> {
+    if (this.shutdown_) return;
+    this.replaceReasons(this.system, system);
+    this.replaceReasons(this.display, display);
+    await this.flush();
+  }
+
+  private replaceReasons(target: AxisState, next: readonly WakeReason[]): void {
     target.reasons.clear();
     for (const r of next) {
       target.reasons.set(r.key, r);
     }
-    await this.flush();
   }
 
   /** Whether the given axis currently holds at least one reason. */

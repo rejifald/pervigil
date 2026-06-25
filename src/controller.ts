@@ -162,8 +162,22 @@ export function createWakeLock(opts: CreateWakeLockOptions = {}): WakeLock {
   }
 
   async function reconcile(): Promise<void> {
-    await engine.applyAxis("system", reasonsFor("system"));
-    await engine.applyAxis("display", reasonsFor("display"));
+    await engine.applyAxes(reasonsFor("system"), reasonsFor("display"));
+  }
+
+  // Serialize every state-changing operation through a promise chain so they
+  // run to completion in order and never interleave with an in-flight
+  // `driver.setState`. A rejected op must not break the chain for later ops:
+  // we always advance `tail` past the settled op, and surface each op's own
+  // result (resolve or reject) to its caller.
+  let tail: Promise<unknown> = Promise.resolve();
+  function enqueue<T>(op: () => Promise<T>): Promise<T> {
+    const run = tail.then(op, op);
+    tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
   }
 
   function status(): WakeLockStatus {
@@ -189,22 +203,26 @@ export function createWakeLock(opts: CreateWakeLockOptions = {}): WakeLock {
   }
 
   return {
-    async acquire(key, o = {}) {
-      // Default to the system axis only when neither axis is specified; an
-      // explicitly-set axis must not drag the other to its default.
-      const specified = o.system !== undefined || o.display !== undefined;
-      holds.set(key, {
-        system: o.system ?? !specified,
-        display: o.display ?? false,
-        reason: { key, description: o.description ?? key },
+    acquire(key, o = {}) {
+      return enqueue(async () => {
+        // Default to the system axis only when neither axis is specified; an
+        // explicitly-set axis must not drag the other to its default.
+        const specified = o.system !== undefined || o.display !== undefined;
+        holds.set(key, {
+          system: o.system ?? !specified,
+          display: o.display ?? false,
+          reason: { key, description: o.description ?? key },
+        });
+        await reconcile();
+        emit("reasonsChanged");
       });
-      await reconcile();
-      emit("reasonsChanged");
     },
-    async release(key) {
-      if (!holds.delete(key)) return;
-      await reconcile();
-      emit("reasonsChanged");
+    release(key) {
+      return enqueue(async () => {
+        if (!holds.delete(key)) return;
+        await reconcile();
+        emit("reasonsChanged");
+      });
     },
     status,
     on(event, listener) {
@@ -218,6 +236,8 @@ export function createWakeLock(opts: CreateWakeLockOptions = {}): WakeLock {
         set.delete(listener);
       };
     },
-    shutdown: () => engine.shutdown(),
+    shutdown() {
+      return enqueue(() => engine.shutdown());
+    },
   };
 }

@@ -81,4 +81,39 @@ describe("WakeLockEngine", () => {
     expect(driver.shutdownCalls).toHaveLength(1);
     expect(driver.disengageCalls).toHaveLength(0);
   });
+
+  it("applyAxes both-axes from idle emits exactly one setState and no intermediate state", async () => {
+    await engine.applyAxes([reason("job", "import")], [reason("job", "import")]);
+
+    expect(driver.setStateCalls).toHaveLength(1);
+    expect(driver.setStateCalls[0]!.state).toEqual({ system: true, display: true });
+    // The buggy two-call path would have emitted {system:true, display:false} first.
+    expect(driver.setStateCalls.some((c) => c.state.system === true && c.state.display === false)).toBe(
+      false,
+    );
+  });
+
+  it("applyAxes replaces both axis reason maps and reconciles once", async () => {
+    await engine.applyAxes([reason("a", "alpha")], []);
+    expect(driver.setStateCalls.at(-1)!.state).toEqual({ system: true, display: false });
+
+    const callsBefore = driver.setStateCalls.length;
+    await engine.applyAxes([], [reason("b", "beta")]);
+    expect(driver.setStateCalls.length).toBe(callsBefore + 1);
+    expect(driver.setStateCalls.at(-1)!.state).toEqual({ system: false, display: true });
+    expect(engine.isEngaged("system")).toBe(false);
+    expect(engine.isEngaged("display")).toBe(true);
+  });
+
+  it("applyAxes coalesces an idempotent same-state, same-description call", async () => {
+    await engine.applyAxes([reason("job", "import")], []);
+    await engine.applyAxes([reason("job", "import")], []);
+    expect(driver.setStateCalls).toHaveLength(1);
+  });
+
+  it("applyAxes is inert after shutdown", async () => {
+    await engine.shutdown();
+    await engine.applyAxes([reason("job", "import")], [reason("job", "import")]);
+    expect(driver.setStateCalls).toHaveLength(0);
+  });
 });
