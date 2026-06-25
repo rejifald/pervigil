@@ -11,6 +11,16 @@ function isContainer(): boolean {
   return false;
 }
 
+function logSelectedDriver(driver: WakeLockDriver, logger?: WakeLockLogger): WakeLockDriver {
+  if (driver.available) {
+    logger?.info?.(
+      { platform: driver.platform, available: driver.available },
+      "Selected wake-lock backend.",
+    );
+  }
+  return driver;
+}
+
 export interface DetectDriverOptions {
   /** Force the no-op driver (also honoured via `PERVIGIL_FORCE_NOOP=1`). */
   forceNoop?: boolean;
@@ -43,11 +53,17 @@ export function detectDriver(opts: DetectDriverOptions = {}): WakeLockDriver {
   }
 
   if (process.platform === "darwin") {
-    return new MacOSWakeLockDriver({ logger, identity, onPrimitiveDied });
+    return logSelectedDriver(
+      new MacOSWakeLockDriver({ logger, identity, onPrimitiveDied }),
+      logger,
+    );
   }
 
   if (process.platform === "linux") {
-    return new LinuxWakeLockDriver({ logger, identity, onPrimitiveDied });
+    return logSelectedDriver(
+      new LinuxWakeLockDriver({ logger, identity, onPrimitiveDied }),
+      logger,
+    );
   }
 
   // win32 and other platforms are not yet implemented — see ROADMAP.md

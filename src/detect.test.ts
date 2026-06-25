@@ -10,6 +10,7 @@ describe("detectDriver", () => {
     // doMock("node:fs") registrations are not cleared by restoreAllMocks; drop
     // them explicitly so a mocked fs cannot leak into a later case.
     vi.doUnmock("node:fs");
+    vi.doUnmock("./drivers/linux.js");
     vi.resetModules();
   });
 
@@ -28,6 +29,14 @@ describe("detectDriver", () => {
     const driver = detectDriver({ forceNoop: true });
     expect(driver.platform).toBe("noop");
     expect(driver.available).toBe(false);
+  });
+
+  it("forceNoop option does not emit a selected-backend info log", async () => {
+    vi.unstubAllEnvs();
+    const { detectDriver } = await import("./detect.js");
+    const info = vi.fn();
+    detectDriver({ forceNoop: true, logger: { warn: vi.fn(), info } });
+    expect(info).not.toHaveBeenCalled();
   });
 
   it("container env variable set → noop, degradedReason=container", async () => {
@@ -91,5 +100,45 @@ describe("detectDriver", () => {
     expect(driver.platform).toBe("noop");
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0]![1])).toMatch(/container/i);
+  });
+
+  it("linux backend selection emits one info log naming the backend", async () => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    vi.doMock("node:fs", () => ({
+      existsSync: () => false,
+    }));
+    vi.doMock("./drivers/linux.js", () => ({
+      LinuxWakeLockDriver: class {
+        readonly platform = "linux-systemd-inhibit";
+        readonly available = true;
+        readonly degradedReason = null;
+        readonly restarts = 0;
+
+        async setState(): Promise<void> {
+          return undefined;
+        }
+
+        async shutdown(): Promise<void> {
+          return undefined;
+        }
+      },
+    }));
+
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, "platform", { value: "linux", configurable: true });
+    try {
+      const { detectDriver } = await import("./detect.js");
+      const info = vi.fn();
+      const driver = detectDriver({ logger: { warn: vi.fn(), info } });
+
+      expect(driver.platform).toBe("linux-systemd-inhibit");
+      expect(info).toHaveBeenCalledTimes(1);
+      const [meta, msg] = info.mock.calls[0]!;
+      expect(meta).toEqual({ platform: "linux-systemd-inhibit", available: true });
+      expect(String(msg)).toMatch(/selected.*backend/i);
+    } finally {
+      Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
+    }
   });
 });
