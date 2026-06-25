@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Build / test toolchain. pervigil ships ZERO runtime dependencies, so these
+  # are all devDependencies — they affect build & release integrity, not what
+  # consumers install. Grouped to keep PR noise low.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # GitHub Actions are pinned to commit SHAs in the workflows; this keeps those
+  # pins current (Dependabot updates the SHA and the version comment together).
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5

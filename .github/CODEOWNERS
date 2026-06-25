@@ -1,0 +1,4 @@
+# Default owner for everything in this repository. With branch protection's
+# "require review from Code Owners" enabled, this enforces owner sign-off; on
+# its own it auto-requests review from the owner on every PR.
+* @rejifald

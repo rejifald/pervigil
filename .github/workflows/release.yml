@@ -35,11 +35,14 @@ jobs:
       contents: write # create the GitHub Release
       id-token: write # npm Trusted Publishing (OIDC) + build provenance
     steps:
-      - uses: actions/checkout@v4
+      # Pinned to full commit SHAs — this job mints short-lived npm credentials
+      # via OIDC, so a hijacked action tag would be a direct supply-chain risk.
+      # Dependabot (`github-actions` ecosystem) keeps these current.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           registry-url: "https://registry.npmjs.org"
