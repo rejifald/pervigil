@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-25
+
+### Added
+
+- Configurable logging. A new `logLevel` option (`"silent" | "warn" | "info" |
+  "debug"`) and `PERVIGIL_LOG_LEVEL` env var control pervigil's own verbosity,
+  with a built-in console sink so you get useful output (e.g. the container
+  no-op warning) without wiring a logger. pervigil stays **silent by default**;
+  a supplied `logger` is used as the sink, and `logLevel: "silent"` hard-mutes
+  it. Exposed on `keepAwake`, `createWakeLock`, and `detectDriver`.
+- `onEvent` telemetry hook on `createWakeLock` / `keepAwake`: a single callback
+  fired on every lifecycle event with a fresh status snapshot — one place to
+  forward to OpenTelemetry, StatsD, or logs without subscribing to each event.
+  A throwing handler is swallowed so it can never break the lock.
+- `PervigilLogLevel` exported from the package root.
+- README: an OpenTelemetry recipe over `collectMetrics()` (no OTel SDK
+  dependency) and a Logging section.
+
 ## [0.2.0] - 2026-06-25
 
 ### Added

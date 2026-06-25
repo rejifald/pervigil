@@ -1,6 +1,6 @@
 {
   "name": "pervigil",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Cross-platform host sleep / display-sleep inhibitor for Node — zero dependencies, no native addons, graceful no-op where unsupported.",
   "keywords": [
     "sleep",
