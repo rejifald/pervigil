@@ -6,6 +6,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-25
+
+### Added
+
+- **Function log sinks.** `logger` now also accepts a `(record) => void`
+  callback, not just a method-shaped object. Each line arrives as a normalised
+  `LogRecord` (`{ level, msg?, fields }`, with `fields` always an object), so
+  loggers whose argument order isn't `(fields, msg)` — winston, consola — map
+  cleanly: `wakeLock({ logger: (r) => winston.log(r.level, r.msg ?? "", r.fields) })`.
+  Method sinks (pino / bunyan / `console`) are unchanged. Level gating and
+  `logLevel: "silent"` apply identically to both shapes. New exported types
+  `LoggerFn` and `LogRecord`.
+
+### Changed
+
+- Broadened npm `keywords` and sharpened the package `description` for
+  discoverability. No API change.
+
 ### Fixed
 
 - `releaseOnExit` now **re-raises** the signal after releasing, so a process
@@ -71,7 +89,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - Configurable logging. A new `logLevel` option (`"silent" | "warn" | "info" |
-  "debug"`) and `PERVIGIL_LOG_LEVEL` env var control pervigil's own verbosity,
+"debug"`) and `PERVIGIL_LOG_LEVEL` env var control pervigil's own verbosity,
   with a built-in console sink so you get useful output (e.g. the container
   no-op warning) without wiring a logger. pervigil stays **silent by default**;
   a supplied `logger` is used as the sink, and `logLevel: "silent"` hard-mutes

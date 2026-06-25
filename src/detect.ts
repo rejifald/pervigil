@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import type { LogLevel, Driver, Logger } from "./types.js";
+import type { LogLevel, Driver, Logger, LoggerFn } from "./types.js";
 import { resolveLogger } from "./internal/logger.js";
 import { NoopDriver } from "./drivers/noop.js";
 import { MacOSDriver } from "./drivers/macos.js";
@@ -18,11 +18,12 @@ export interface DetectOptions {
   forceNoop?: boolean;
   /**
    * Sink for pervigil's log lines (warnings about degraded/no-op modes, plus
-   * an info line naming the selected backend). Defaults to a built-in console
-   * sink, but only emits once {@link DetectOptions.logLevel} (or
-   * `PERVIGIL_LOG_LEVEL`) opts in — pervigil is silent by default.
+   * an info line naming the selected backend). A method-shaped {@link Logger}
+   * or a {@link LoggerFn}. Defaults to a built-in console sink, but only emits
+   * once {@link DetectOptions.logLevel} (or `PERVIGIL_LOG_LEVEL`) opts in —
+   * pervigil is silent by default.
    */
-  logger?: Logger;
+  logger?: Logger | LoggerFn;
   /**
    * Emission threshold for pervigil's own logs. Defaults to `silent` (no
    * output) unless a `logger` is supplied. Also settable via the
@@ -58,19 +59,28 @@ export function detectDriver(opts: DetectOptions = {}): Driver {
 
   if (process.platform === "darwin") {
     const driver = new MacOSDriver({ logger, identity, onPrimitiveDied });
-    logger?.info?.({ platform: driver.platform, available: driver.available }, "pervigil: using " + driver.platform);
+    logger?.info?.(
+      { platform: driver.platform, available: driver.available },
+      "pervigil: using " + driver.platform,
+    );
     return driver;
   }
 
   if (process.platform === "linux") {
     const driver = new LinuxDriver({ logger, identity, onPrimitiveDied });
-    logger?.info?.({ platform: driver.platform, available: driver.available }, "pervigil: using " + driver.platform);
+    logger?.info?.(
+      { platform: driver.platform, available: driver.available },
+      "pervigil: using " + driver.platform,
+    );
     return driver;
   }
 
   if (process.platform === "win32") {
     const driver = new WindowsDriver({ logger, identity, onPrimitiveDied });
-    logger?.info?.({ platform: driver.platform, available: driver.available }, "pervigil: using " + driver.platform);
+    logger?.info?.(
+      { platform: driver.platform, available: driver.available },
+      "pervigil: using " + driver.platform,
+    );
     return driver;
   }
 

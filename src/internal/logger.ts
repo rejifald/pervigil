@@ -1,4 +1,4 @@
-import type { LogLevel, Logger } from "../types.js";
+import type { LogLevel, Logger, LoggerFn } from "../types.js";
 
 /** Numeric rank per level — higher emits strictly more. */
 const RANK: Record<LogLevel, number> = {
@@ -35,9 +35,30 @@ function emit(fn: (...args: unknown[]) => void, obj: unknown, msg?: string): voi
   }
 }
 
+/** Coerce a sink argument to {@link LogRecord.fields} — always an object. */
+function toFields(obj: unknown): Record<string, unknown> {
+  return obj && typeof obj === "object" ? (obj as Record<string, unknown>) : {};
+}
+
+/**
+ * Adapt a {@link LoggerFn} to the internal method-shaped {@link Logger}, so the
+ * rest of the pipeline (level gating, call sites) is identical for both sink
+ * styles. Each method maps its `(fields, msg)` call into one {@link LogRecord}.
+ */
+function fromFunction(fn: LoggerFn): Logger {
+  return {
+    warn: (obj, msg) => fn({ level: "warn", msg, fields: toFields(obj) }),
+    info: (obj, msg) => fn({ level: "info", msg, fields: toFields(obj) }),
+    debug: (obj, msg) => fn({ level: "debug", msg, fields: toFields(obj) }),
+  };
+}
+
 export interface ResolveLoggerOptions {
-  /** Sink for log lines. Defaults to a built-in console sink. */
-  logger?: Logger;
+  /**
+   * Sink for log lines — a method-shaped {@link Logger} or a {@link LoggerFn}.
+   * Defaults to a built-in console sink.
+   */
+  logger?: Logger | LoggerFn;
   /** Emission threshold. See {@link LogLevel}. */
   logLevel?: LogLevel;
 }
@@ -58,7 +79,8 @@ export function resolveLogger(opts: ResolveLoggerOptions = {}): Logger | undefin
   const level = opts.logLevel ?? envLevel() ?? (opts.logger ? "debug" : "silent");
   if (level === "silent") return undefined;
 
-  const sink = opts.logger ?? consoleSink;
+  const sink: Logger =
+    typeof opts.logger === "function" ? fromFunction(opts.logger) : (opts.logger ?? consoleSink);
   const threshold = RANK[level];
 
   return {
