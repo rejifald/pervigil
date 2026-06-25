@@ -19,7 +19,7 @@ vi.mock("node:fs", () => ({
 }));
 
 // Must import AFTER mocks are registered
-import { LinuxWakeLockDriver, type LinuxWakeLockDriverOptions } from "./linux.js";
+import { LinuxDriver, type LinuxDriverOptions } from "./linux.js";
 
 // ---------- helpers ----------
 
@@ -62,8 +62,8 @@ const FAKE_INHIBIT = "/fake/systemd-inhibit";
 const FAKE_WAKE_LOCK = "/fake/wake_lock";
 const FAKE_WAKE_UNLOCK = "/fake/wake_unlock";
 
-function makeDriver(overrides: LinuxWakeLockDriverOptions = {}) {
-  return new LinuxWakeLockDriver({
+function makeDriver(overrides: LinuxDriverOptions = {}) {
+  return new LinuxDriver({
     systemdInhibitPath: FAKE_INHIBIT,
     sysfsWakeLockPath: FAKE_WAKE_LOCK,
     sysfsWakeUnlockPath: FAKE_WAKE_UNLOCK,
@@ -74,7 +74,7 @@ function makeDriver(overrides: LinuxWakeLockDriverOptions = {}) {
 
 // ---------- tests ----------
 
-describe("LinuxWakeLockDriver — backend selection", () => {
+describe("LinuxDriver — backend selection", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -124,7 +124,7 @@ describe("LinuxWakeLockDriver — backend selection", () => {
   });
 });
 
-describe("LinuxWakeLockDriver — systemd-inhibit backend", () => {
+describe("LinuxDriver — systemd-inhibit backend", () => {
   let child: ReturnType<typeof makeChild>;
 
   beforeEach(() => {
@@ -233,7 +233,7 @@ describe("LinuxWakeLockDriver — systemd-inhibit backend", () => {
   });
 });
 
-describe("LinuxWakeLockDriver — sysfs backend", () => {
+describe("LinuxDriver — sysfs backend", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -271,7 +271,7 @@ describe("LinuxWakeLockDriver — sysfs backend", () => {
   });
 });
 
-describe("LinuxWakeLockDriver — noop backend", () => {
+describe("LinuxDriver — noop backend", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });

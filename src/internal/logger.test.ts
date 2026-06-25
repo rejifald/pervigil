@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { resolveLogger } from "./logger.js";
-import type { WakeLockLogger } from "../types.js";
+import type { Logger } from "../types.js";
 
-function spySink(): WakeLockLogger & {
+function spySink(): Logger & {
   warn: ReturnType<typeof vi.fn>;
   info: ReturnType<typeof vi.fn>;
   debug: ReturnType<typeof vi.fn>;

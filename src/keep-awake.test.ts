@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { keepAwake } from "./keep-awake.js";
-import { MockWakeLockDriver } from "./drivers/mock.js";
+import { MockDriver } from "./drivers/mock.js";
 
 describe("keepAwake", () => {
-  let driver: MockWakeLockDriver;
+  let driver: MockDriver;
 
   beforeEach(() => {
-    driver = new MockWakeLockDriver();
+    driver = new MockDriver();
   });
 
   it("acquires on call and releases on handle.release()", async () => {
@@ -65,10 +65,10 @@ describe("keepAwake", () => {
 });
 
 describe("keepAwake.for / keepAwake.until", () => {
-  let driver: MockWakeLockDriver;
+  let driver: MockDriver;
 
   beforeEach(() => {
-    driver = new MockWakeLockDriver();
+    driver = new MockDriver();
     vi.useFakeTimers();
   });
 
@@ -144,10 +144,10 @@ describe("keepAwake.for / keepAwake.until", () => {
 });
 
 describe("keepAwake.shared", () => {
-  let driver: MockWakeLockDriver;
+  let driver: MockDriver;
 
   beforeEach(() => {
-    driver = new MockWakeLockDriver();
+    driver = new MockDriver();
   });
 
   afterEach(async () => {
@@ -196,8 +196,8 @@ describe("keepAwake.shared", () => {
   });
 
   it("configures the shared controller from the first call's options", async () => {
-    const first = new MockWakeLockDriver();
-    const second = new MockWakeLockDriver();
+    const first = new MockDriver();
+    const second = new MockDriver();
 
     const a = await keepAwake.shared({ system: true, driver: first });
     const b = await keepAwake.shared({ system: true, driver: second });
@@ -211,13 +211,13 @@ describe("keepAwake.shared", () => {
   });
 
   it("shutdownShared() tears down the shared instance for a clean slate", async () => {
-    const first = new MockWakeLockDriver();
+    const first = new MockDriver();
     await keepAwake.shared({ system: true, driver: first });
     await keepAwake.shutdownShared();
     expect(first.shutdownCalls.length).toBe(1);
 
     // A fresh shared instance can be configured by a new first caller.
-    const second = new MockWakeLockDriver();
+    const second = new MockDriver();
     const b = await keepAwake.shared({ system: true, driver: second });
     expect(second.engageTransitions).toBe(1);
     await b.release();

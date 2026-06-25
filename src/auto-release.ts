@@ -1,7 +1,7 @@
 /**
- * Options for {@link autoReleaseOnExit}.
+ * Options for {@link releaseOnExit}.
  */
-export interface AutoReleaseOnExitOptions {
+export interface AutoReleaseOptions {
   /**
    * POSIX signals to release on. Default `["SIGINT", "SIGTERM"]`.
    *
@@ -30,8 +30,8 @@ const DEFAULT_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
  * every listener it added.
  *
  * ```ts
- * const lock = createWakeLock();
- * const stop = autoReleaseOnExit(lock);
+ * const lock = wakeLock();
+ * const stop = releaseOnExit(lock);
  * // ... later, if you take over signal handling yourself:
  * stop();
  * ```
@@ -40,9 +40,9 @@ const DEFAULT_SIGNALS: NodeJS.Signals[] = ["SIGINT", "SIGTERM"];
  * signal handlers should call the returned unregister function to avoid
  * double-handling.
  */
-export function autoReleaseOnExit(
+export function releaseOnExit(
   target: { shutdown(): Promise<void> | void },
-  opts: AutoReleaseOnExitOptions = {},
+  opts: AutoReleaseOptions = {},
 ): () => void {
   const emitter = opts.emitter ?? process;
   const signals = opts.signals ?? DEFAULT_SIGNALS;

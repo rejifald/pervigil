@@ -50,7 +50,7 @@ describe("detectDriver", () => {
     expect(driver.available).toBe(false);
   });
 
-  it("no force, no container → returns a WakeLockDriver shape without throwing", async () => {
+  it("no force, no container → returns a Driver shape without throwing", async () => {
     vi.unstubAllEnvs();
     vi.resetModules();
     const { detectDriver } = await import("./detect.js");

@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
-import type { PervigilLogLevel, WakeLockDriver, WakeLockLogger } from "./types.js";
+import type { LogLevel, Driver, Logger } from "./types.js";
 import { resolveLogger } from "./internal/logger.js";
-import { NoopWakeLockDriver } from "./drivers/noop.js";
-import { MacOSWakeLockDriver } from "./drivers/macos.js";
-import { LinuxWakeLockDriver } from "./drivers/linux.js";
-import { WindowsWakeLockDriver } from "./drivers/windows.js";
+import { NoopDriver } from "./drivers/noop.js";
+import { MacOSDriver } from "./drivers/macos.js";
+import { LinuxDriver } from "./drivers/linux.js";
+import { WindowsDriver } from "./drivers/windows.js";
 
 function isContainer(): boolean {
   if (existsSync("/.dockerenv")) return true;
@@ -13,22 +13,22 @@ function isContainer(): boolean {
   return false;
 }
 
-export interface DetectDriverOptions {
+export interface DetectOptions {
   /** Force the no-op driver (also honoured via `PERVIGIL_FORCE_NOOP=1`). */
   forceNoop?: boolean;
   /**
    * Sink for pervigil's log lines (warnings about degraded/no-op modes, plus
    * an info line naming the selected backend). Defaults to a built-in console
-   * sink, but only emits once {@link DetectDriverOptions.logLevel} (or
+   * sink, but only emits once {@link DetectOptions.logLevel} (or
    * `PERVIGIL_LOG_LEVEL`) opts in — pervigil is silent by default.
    */
-  logger?: WakeLockLogger;
+  logger?: Logger;
   /**
    * Emission threshold for pervigil's own logs. Defaults to `silent` (no
    * output) unless a `logger` is supplied. Also settable via the
    * `PERVIGIL_LOG_LEVEL` env var.
    */
-  logLevel?: PervigilLogLevel;
+  logLevel?: LogLevel;
   /** Stable identity surfaced to the OS (systemd `--who=`, sysfs cookie). */
   identity?: string;
   /** Invoked when the underlying OS primitive dies unexpectedly. */
@@ -37,15 +37,15 @@ export interface DetectDriverOptions {
 
 /**
  * Pick the best wake-lock driver for the current platform. Returns a
- * {@link NoopWakeLockDriver} (with a warning on the resolved logger) inside
+ * {@link NoopDriver} (with a warning on the resolved logger) inside
  * containers or on unsupported platforms — it never throws.
  */
-export function detectDriver(opts: DetectDriverOptions = {}): WakeLockDriver {
+export function detectDriver(opts: DetectOptions = {}): Driver {
   const { identity, onPrimitiveDied } = opts;
   const logger = resolveLogger({ logger: opts.logger, logLevel: opts.logLevel });
 
   if (opts.forceNoop || process.env["PERVIGIL_FORCE_NOOP"] === "1") {
-    return new NoopWakeLockDriver("forced");
+    return new NoopDriver("forced");
   }
 
   if (isContainer()) {
@@ -53,23 +53,23 @@ export function detectDriver(opts: DetectDriverOptions = {}): WakeLockDriver {
       { platform: process.platform },
       "Running in a container — host sleep primitives unreachable; pervigil is a no-op.",
     );
-    return new NoopWakeLockDriver("container");
+    return new NoopDriver("container");
   }
 
   if (process.platform === "darwin") {
-    const driver = new MacOSWakeLockDriver({ logger, identity, onPrimitiveDied });
+    const driver = new MacOSDriver({ logger, identity, onPrimitiveDied });
     logger?.info?.({ platform: driver.platform, available: driver.available }, "pervigil: using " + driver.platform);
     return driver;
   }
 
   if (process.platform === "linux") {
-    const driver = new LinuxWakeLockDriver({ logger, identity, onPrimitiveDied });
+    const driver = new LinuxDriver({ logger, identity, onPrimitiveDied });
     logger?.info?.({ platform: driver.platform, available: driver.available }, "pervigil: using " + driver.platform);
     return driver;
   }
 
   if (process.platform === "win32") {
-    const driver = new WindowsWakeLockDriver({ logger, identity, onPrimitiveDied });
+    const driver = new WindowsDriver({ logger, identity, onPrimitiveDied });
     logger?.info?.({ platform: driver.platform, available: driver.available }, "pervigil: using " + driver.platform);
     return driver;
   }
@@ -80,5 +80,5 @@ export function detectDriver(opts: DetectDriverOptions = {}): WakeLockDriver {
     { platform: process.platform },
     "No sleep-inhibitor backend for this platform — pervigil is a no-op. Configure host-side sleep prevention manually.",
   );
-  return new NoopWakeLockDriver("unsupported-platform");
+  return new NoopDriver("unsupported-platform");
 }

@@ -1,13 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { collectMetrics, toPrometheus } from "./metrics.js";
-import { createWakeLock } from "./controller.js";
-import { MockWakeLockDriver } from "./drivers/mock.js";
+import { wakeLock } from "./controller.js";
+import { MockDriver } from "./drivers/mock.js";
 import type { WakeLockStatus } from "./controller.js";
 
 /** Build a lock on the in-memory mock driver and engage the system axis once. */
 async function engagedSystemLock() {
-  const driver = new MockWakeLockDriver();
-  const lock = createWakeLock({ driver });
+  const driver = new MockDriver();
+  const lock = wakeLock({ driver });
   await lock.acquire("job", { system: true });
   return lock;
 }

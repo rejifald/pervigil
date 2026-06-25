@@ -1,4 +1,4 @@
-import type { DegradedReason, WakeLockDriver, WakeLockState } from "../types.js";
+import type { DegradedReason, Driver, WakeLockState } from "../types.js";
 
 export interface MockSetStateCall {
   state: WakeLockState;
@@ -21,7 +21,7 @@ export interface MockSetStateCall {
  *                           including the implicit one inside `shutdown()`.
  *   - `shutdownCalls`     — timestamps of every `shutdown()` call.
  */
-export class MockWakeLockDriver implements WakeLockDriver {
+export class MockDriver implements Driver {
   readonly platform = "mock";
   readonly available = true;
   readonly degradedReason: DegradedReason = null;
