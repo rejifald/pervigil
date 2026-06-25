@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Allow other workflows (e.g. release.yml) to reuse this gate verbatim.
+  workflow_call:
 
 jobs:
   build:
@@ -11,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         node: [20, 22]
     steps:
       - uses: actions/checkout@v4

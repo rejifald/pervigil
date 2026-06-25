@@ -82,7 +82,7 @@ describe("detectDriver", () => {
     }
   });
 
-  it("win32 → Windows driver (degraded missing-binary where PowerShell is absent)", async () => {
+  it("win32 → routes to the Windows backend (not the unsupported-platform no-op)", async () => {
     vi.unstubAllEnvs();
     vi.resetModules();
     const originalPlatform = process.platform;
@@ -90,12 +90,19 @@ describe("detectDriver", () => {
     try {
       const { detectDriver } = await import("./detect.js");
       const driver = detectDriver();
-      // On this CI host (macOS/Linux) PowerShell is absent, so the Windows
-      // driver resolves to its no-op variant rather than the unsupported-
-      // platform no-op — proving win32 now routes to the Windows backend.
-      expect(driver.platform).toBe("windows-noop");
-      expect(driver.available).toBe(false);
-      expect(driver.degradedReason).toBe("missing-binary");
+      // win32 must route to the Windows backend regardless of host. A real
+      // Windows runner finds PowerShell (`windows-powershell`, available); a
+      // macOS/Linux CI host has none, so the driver degrades to its own no-op
+      // variant (`windows-noop`). Either way it's the Windows backend — never
+      // the generic `unsupported-platform` no-op.
+      expect(driver.platform).toMatch(/^windows-(powershell|noop)$/);
+      if (driver.available) {
+        expect(driver.platform).toBe("windows-powershell");
+        expect(driver.degradedReason).toBe(null);
+      } else {
+        expect(driver.platform).toBe("windows-noop");
+        expect(driver.degradedReason).toBe("missing-binary");
+      }
     } finally {
       Object.defineProperty(process, "platform", { value: originalPlatform, configurable: true });
     }
