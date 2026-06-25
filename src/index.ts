@@ -30,6 +30,7 @@ export type { WindowsWakeLockDriverOptions } from "./drivers/windows.js";
 // ── Shared types ─────────────────────────────────────────────────────────
 export type {
   DegradedReason,
+  PervigilLogLevel,
   WakeAxis,
   WakeLockDriver,
   WakeLockLogger,
