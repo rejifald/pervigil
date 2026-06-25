@@ -28,6 +28,18 @@ interface KeepAwakeFn {
    * `fn` throws. Returns whatever `fn` returns.
    */
   while<T>(opts: KeepAwakeOptions, fn: () => Promise<T> | T): Promise<T>;
+  /**
+   * Acquire immediately and schedule an automatic release after `ms`
+   * milliseconds. The returned handle can still be released early; an early
+   * `release()` cancels the pending timer so it never double-releases.
+   */
+  for(opts: KeepAwakeOptions, ms: number): Promise<WakeLockHandle>;
+  /**
+   * Like {@link KeepAwakeFn.for} but release at a fixed wall-clock instant.
+   * The delay is `when.getTime() - Date.now()`, clamped to `0` (a past `when`
+   * releases on the next tick).
+   */
+  until(opts: KeepAwakeOptions, when: Date): Promise<WakeLockHandle>;
 }
 
 /**
@@ -63,4 +75,51 @@ keepAwake.while = async function keepAwakeWhile<T>(
   } finally {
     await lock.release();
   }
+};
+
+keepAwake.for = async function keepAwakeFor(
+  opts: KeepAwakeOptions,
+  ms: number,
+): Promise<WakeLockHandle> {
+  const lock = await keepAwake(opts);
+
+  // Funnel the timer firing and any manual release through one idempotent
+  // path so the underlying lock is released at most once.
+  let released = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  const release = async (): Promise<void> => {
+    if (released) return;
+    released = true;
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      timer = undefined;
+    }
+    await lock.release();
+  };
+
+  timer = setTimeout(
+    () => {
+      // The timer owns its own release; ignore the returned promise (the caller
+      // is no longer awaiting), but never let it reject unhandled.
+      void release();
+    },
+    Math.max(0, ms),
+  );
+  // Never keep the event loop alive solely for the auto-release.
+  timer.unref();
+
+  return {
+    release,
+    status: () => lock.status(),
+    [Symbol.asyncDispose]: release,
+  };
+};
+
+keepAwake.until = function keepAwakeUntil(
+  opts: KeepAwakeOptions,
+  when: Date,
+): Promise<WakeLockHandle> {
+  const ms = Math.max(0, when.getTime() - Date.now());
+  return keepAwake.for(opts, ms);
 };
