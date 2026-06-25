@@ -236,4 +236,60 @@ describe("createWakeLock", () => {
     expect(seen).toEqual(["primitiveDied"]);
     expect(wl.status().counters.primitiveRestarts).toBe(1);
   });
+
+  describe("onEvent telemetry hook", () => {
+    it("fires for every lifecycle event with (event, status)", async () => {
+      const events: { event: string; engaged: WakeLockState }[] = [];
+      const wl = createWakeLock({
+        driver,
+        onEvent: (event, status) => events.push({ event, engaged: status.engaged }),
+      });
+
+      await wl.acquire("job", { system: true });
+      await wl.release("job");
+
+      const names = events.map((e) => e.event);
+      // acquire: engine flips system on (engaged) then acquire emits reasonsChanged;
+      // release: engine flips system off (disengaged) then reasonsChanged.
+      expect(names).toEqual(["engaged", "reasonsChanged", "disengaged", "reasonsChanged"]);
+      // The snapshot reflects the state at emit time.
+      expect(events[0]!.engaged).toEqual({ system: true, display: false });
+      expect(events[3]!.engaged).toEqual({ system: false, display: false });
+    });
+
+    it("fires for primitiveDied", async () => {
+      const seen: string[] = [];
+      const wl = createWakeLock({ driver, onEvent: (event) => seen.push(event) });
+      await wl.acquire("a", { system: true });
+      driver.simulatePrimitiveDeath();
+      expect(seen).toContain("primitiveDied");
+    });
+
+    it("fires 'degraded' for an unavailable driver", async () => {
+      const seen: string[] = [];
+      createWakeLock({
+        driver: new NoopWakeLockDriver("forced"),
+        onEvent: (event) => seen.push(event),
+      });
+      // `degraded` is surfaced on a microtask so callers can attach listeners
+      // synchronously after construction; flush the queue.
+      await tick();
+      expect(seen).toContain("degraded");
+    });
+
+    it("a throwing onEvent never breaks the lock and still notifies .on listeners", async () => {
+      const seen: string[] = [];
+      const wl = createWakeLock({
+        driver,
+        onEvent: () => {
+          throw new Error("telemetry backend down");
+        },
+      });
+      wl.on("engaged", () => seen.push("engaged"));
+
+      await expect(wl.acquire("job", { system: true })).resolves.toBeUndefined();
+      expect(wl.status().engaged.system).toBe(true);
+      expect(seen).toEqual(["engaged"]);
+    });
+  });
 });

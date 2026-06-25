@@ -29,13 +29,23 @@ export interface WakeReason {
 
 /**
  * Pino-shaped logger surface used by drivers. All methods are optional so a
- * plain `console` or `{}` satisfies it.
+ * plain `console` or `{}` satisfies it. This is the *sink* — where pervigil's
+ * log lines go; {@link PervigilLogLevel} controls *which* lines are emitted.
  */
 export interface WakeLockLogger {
   warn(obj: unknown, msg?: string): void;
   info?(obj: unknown, msg?: string): void;
   debug?(obj: unknown, msg?: string): void;
 }
+
+/**
+ * Verbosity threshold for pervigil's own log emission, highest (`debug`) to
+ * lowest (`silent`). Resolved from the `logLevel` option, else the
+ * `PERVIGIL_LOG_LEVEL` env var, else a default (`silent` when no logger is
+ * wired, `debug` when a logger is supplied — i.e. forward everything and let
+ * your logger filter).
+ */
+export type PervigilLogLevel = "silent" | "warn" | "info" | "debug";
 
 /**
  * The platform mechanism behind a wake lock. Drivers coalesce idempotent

@@ -1,0 +1,102 @@
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { resolveLogger } from "./logger.js";
+import type { WakeLockLogger } from "../types.js";
+
+function spySink(): WakeLockLogger & {
+  warn: ReturnType<typeof vi.fn>;
+  info: ReturnType<typeof vi.fn>;
+  debug: ReturnType<typeof vi.fn>;
+} {
+  return { warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
+}
+
+describe("resolveLogger", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("is silent by default — no logger, no level, no env → undefined", () => {
+    expect(resolveLogger({})).toBeUndefined();
+  });
+
+  it("a provided logger with no level forwards every method (back-compat)", () => {
+    const sink = spySink();
+    const logger = resolveLogger({ logger: sink })!;
+    logger.warn({ a: 1 }, "w");
+    logger.info?.({ b: 2 }, "i");
+    logger.debug?.({ c: 3 }, "d");
+    expect(sink.warn).toHaveBeenCalledWith({ a: 1 }, "w");
+    expect(sink.info).toHaveBeenCalledWith({ b: 2 }, "i");
+    expect(sink.debug).toHaveBeenCalledWith({ c: 3 }, "d");
+  });
+
+  it("logLevel:'warn' forwards warn but gates info and debug", () => {
+    const sink = spySink();
+    const logger = resolveLogger({ logger: sink, logLevel: "warn" })!;
+    logger.warn({}, "w");
+    logger.info?.({}, "i");
+    logger.debug?.({}, "d");
+    expect(sink.warn).toHaveBeenCalledTimes(1);
+    expect(sink.info).not.toHaveBeenCalled();
+    expect(sink.debug).not.toHaveBeenCalled();
+  });
+
+  it("logLevel:'info' forwards warn+info but gates debug", () => {
+    const sink = spySink();
+    const logger = resolveLogger({ logger: sink, logLevel: "info" })!;
+    logger.warn({}, "w");
+    logger.info?.({}, "i");
+    logger.debug?.({}, "d");
+    expect(sink.warn).toHaveBeenCalledTimes(1);
+    expect(sink.info).toHaveBeenCalledTimes(1);
+    expect(sink.debug).not.toHaveBeenCalled();
+  });
+
+  it("logLevel:'silent' hard-mutes even a provided logger", () => {
+    const sink = spySink();
+    expect(resolveLogger({ logger: sink, logLevel: "silent" })).toBeUndefined();
+  });
+
+  it("logLevel without a logger logs to the console sink at the chosen level", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    const logger = resolveLogger({ logLevel: "warn" })!;
+    logger.warn({ degraded: true }, "container no-op");
+    logger.debug?.({}, "noisy");
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(debug).not.toHaveBeenCalled();
+  });
+
+  it("PERVIGIL_LOG_LEVEL drives the level when no option is given", () => {
+    vi.stubEnv("PERVIGIL_LOG_LEVEL", "debug");
+    const sink = spySink();
+    const logger = resolveLogger({ logger: sink })!;
+    logger.debug?.({}, "d");
+    expect(sink.debug).toHaveBeenCalledTimes(1);
+  });
+
+  it("an explicit logLevel option overrides PERVIGIL_LOG_LEVEL", () => {
+    vi.stubEnv("PERVIGIL_LOG_LEVEL", "debug");
+    const sink = spySink();
+    const logger = resolveLogger({ logger: sink, logLevel: "warn" })!;
+    logger.info?.({}, "i");
+    expect(sink.info).not.toHaveBeenCalled();
+  });
+
+  it("an unrecognised PERVIGIL_LOG_LEVEL is ignored (falls back to default)", () => {
+    vi.stubEnv("PERVIGIL_LOG_LEVEL", "loud");
+    // No logger + unrecognised env ⇒ default silent.
+    expect(resolveLogger({})).toBeUndefined();
+  });
+
+  it("does not throw when the sink omits optional info/debug methods", () => {
+    const warn = vi.fn();
+    const logger = resolveLogger({ logger: { warn }, logLevel: "debug" })!;
+    expect(() => {
+      logger.info?.({}, "i");
+      logger.debug?.({}, "d");
+    }).not.toThrow();
+    expect(warn).not.toHaveBeenCalled();
+  });
+});

@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import type { WakeLockDriver, WakeLockLogger } from "./types.js";
+import type { PervigilLogLevel, WakeLockDriver, WakeLockLogger } from "./types.js";
+import { resolveLogger } from "./internal/logger.js";
 import { NoopWakeLockDriver } from "./drivers/noop.js";
 import { MacOSWakeLockDriver } from "./drivers/macos.js";
 import { LinuxWakeLockDriver } from "./drivers/linux.js";
@@ -15,8 +16,19 @@ function isContainer(): boolean {
 export interface DetectDriverOptions {
   /** Force the no-op driver (also honoured via `PERVIGIL_FORCE_NOOP=1`). */
   forceNoop?: boolean;
-  /** Optional logger — used for fallback / unsupported-platform warnings. */
+  /**
+   * Sink for pervigil's log lines (warnings about degraded/no-op modes, plus
+   * an info line naming the selected backend). Defaults to a built-in console
+   * sink, but only emits once {@link DetectDriverOptions.logLevel} (or
+   * `PERVIGIL_LOG_LEVEL`) opts in — pervigil is silent by default.
+   */
   logger?: WakeLockLogger;
+  /**
+   * Emission threshold for pervigil's own logs. Defaults to `silent` (no
+   * output) unless a `logger` is supplied. Also settable via the
+   * `PERVIGIL_LOG_LEVEL` env var.
+   */
+  logLevel?: PervigilLogLevel;
   /** Stable identity surfaced to the OS (systemd `--who=`, sysfs cookie). */
   identity?: string;
   /** Invoked when the underlying OS primitive dies unexpectedly. */
@@ -25,11 +37,12 @@ export interface DetectDriverOptions {
 
 /**
  * Pick the best wake-lock driver for the current platform. Returns a
- * {@link NoopWakeLockDriver} (with a warning on the supplied logger) inside
+ * {@link NoopWakeLockDriver} (with a warning on the resolved logger) inside
  * containers or on unsupported platforms — it never throws.
  */
 export function detectDriver(opts: DetectDriverOptions = {}): WakeLockDriver {
-  const { logger, identity, onPrimitiveDied } = opts;
+  const { identity, onPrimitiveDied } = opts;
+  const logger = resolveLogger({ logger: opts.logger, logLevel: opts.logLevel });
 
   if (opts.forceNoop || process.env["PERVIGIL_FORCE_NOOP"] === "1") {
     return new NoopWakeLockDriver("forced");
