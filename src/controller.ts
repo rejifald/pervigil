@@ -108,11 +108,19 @@ export function createWakeLock(opts: CreateWakeLockOptions = {}): WakeLock {
     detectDriver({
       logger: opts.logger,
       identity: opts.identity,
-      onPrimitiveDied: () => {
-        counters.primitiveRestarts += 1;
-        emit("primitiveDied");
-      },
+      // Death notification is wired below via `driver.onPrimitiveDied(...)` for
+      // every driver (injected or self-built), so we must NOT also pass the
+      // constructor `onPrimitiveDied` option here — doing so would register the
+      // same handler twice and double-count each death.
     });
+
+  // Register the controller's death handler for EVERY driver — injected drivers
+  // never see the `detectDriver` constructor option, so this is the only path
+  // that surfaces `primitiveDied` for them.
+  driver.onPrimitiveDied?.(() => {
+    counters.primitiveRestarts += 1;
+    emit("primitiveDied");
+  });
 
   const engine = new WakeLockEngine(driver, {
     onFlush: (state, prev) => {

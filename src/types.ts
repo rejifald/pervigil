@@ -57,4 +57,12 @@ export interface WakeLockDriver {
   setState(state: WakeLockState, description: string): Promise<void>;
   /** Release every axis and tear down the OS primitive. Idempotent. */
   shutdown(): Promise<void>;
+  /**
+   * Register a callback invoked whenever the OS primitive dies unexpectedly
+   * (and is recycled). May be called more than once to register multiple
+   * callbacks. Optional: drivers with no recyclable primitive (e.g. the no-op
+   * driver) may treat it as a no-op. The controller uses this to surface the
+   * `primitiveDied` event for both self-built and injected drivers.
+   */
+  onPrimitiveDied?(cb: () => void): void;
 }

@@ -25,7 +25,6 @@ export class MockWakeLockDriver implements WakeLockDriver {
   readonly platform = "mock";
   readonly available = true;
   readonly degradedReason: DegradedReason = null;
-  readonly restarts = 0;
 
   readonly setStateCalls: MockSetStateCall[] = [];
   readonly engageCalls: string[] = [];
@@ -33,10 +32,32 @@ export class MockWakeLockDriver implements WakeLockDriver {
   readonly shutdownCalls: number[] = [];
 
   private _engageTransitions = 0;
+  private _restarts = 0;
+  private readonly _diedCallbacks: (() => void)[] = [];
   private lastState: WakeLockState = { system: false, display: false };
 
   get engageTransitions(): number {
     return this._engageTransitions;
+  }
+
+  /** Times {@link simulatePrimitiveDeath} has been called. */
+  get restarts(): number {
+    return this._restarts;
+  }
+
+  onPrimitiveDied(cb: () => void): void {
+    this._diedCallbacks.push(cb);
+  }
+
+  /**
+   * Test helper: simulate the OS primitive dying unexpectedly. Bumps
+   * `restarts` and invokes every callback registered via
+   * {@link onPrimitiveDied}, mirroring what the real drivers do on an
+   * unexpected child exit.
+   */
+  simulatePrimitiveDeath(): void {
+    this._restarts += 1;
+    for (const cb of this._diedCallbacks) cb();
   }
 
   async setState(state: WakeLockState, description: string): Promise<void> {

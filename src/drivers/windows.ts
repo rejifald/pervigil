@@ -104,14 +104,14 @@ export class WindowsWakeLockDriver implements WakeLockDriver {
 
   private readonly _powershellPath: string;
   private readonly _logger: WakeLockLogger | undefined;
-  private readonly _onPrimitiveDied: (() => void) | undefined;
+  private readonly _diedCallbacks: (() => void)[] = [];
   private _child: ChildProcess | null = null;
   private _currentFlags: string | null = null;
   private _restarts = 0;
 
   constructor(opts: WindowsWakeLockDriverOptions = {}) {
     this._logger = opts.logger;
-    this._onPrimitiveDied = opts.onPrimitiveDied;
+    if (opts.onPrimitiveDied) this._diedCallbacks.push(opts.onPrimitiveDied);
 
     const probe = probePowershell(opts.powershellPath);
     this._powershellPath = probe.path;
@@ -133,6 +133,20 @@ export class WindowsWakeLockDriver implements WakeLockDriver {
 
   get restarts(): number {
     return this._restarts;
+  }
+
+  onPrimitiveDied(cb: () => void): void {
+    this._diedCallbacks.push(cb);
+  }
+
+  private _emitPrimitiveDied(): void {
+    for (const cb of this._diedCallbacks) {
+      try {
+        cb();
+      } catch {
+        // A misbehaving death callback must never break the driver.
+      }
+    }
   }
 
   async setState(state: WakeLockState, description: string): Promise<void> {
@@ -191,7 +205,7 @@ export class WindowsWakeLockDriver implements WakeLockDriver {
           { code, signal },
           "PowerShell exited unexpectedly — sleep inhibitor dropped, will re-engage on next change",
         );
-        this._onPrimitiveDied?.();
+        this._emitPrimitiveDied();
       }
       clearIfCurrent();
     });

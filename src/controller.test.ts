@@ -224,4 +224,16 @@ describe("createWakeLock", () => {
     expect(wl.status().reasons.display.map((r) => r.key)).toEqual(["good"]);
     expect(wl.status().engaged.display).toBe(true);
   });
+
+  it("fires primitiveDied + bumps primitiveRestarts for an INJECTED driver", async () => {
+    const wl = createWakeLock({ driver });
+    const seen: string[] = [];
+    wl.on("primitiveDied", () => seen.push("primitiveDied"));
+
+    await wl.acquire("a", { system: true });
+    driver.simulatePrimitiveDeath();
+
+    expect(seen).toEqual(["primitiveDied"]);
+    expect(wl.status().counters.primitiveRestarts).toBe(1);
+  });
 });

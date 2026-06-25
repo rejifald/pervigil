@@ -9,8 +9,11 @@ export interface MacOSWakeLockDriverOptions {
   /** Optional logger. */
   logger?: WakeLockLogger;
   /**
-   * Accepted for API symmetry with the Linux driver; `caffeinate` has no
-   * equivalent of an identity string, so it is currently unused.
+   * No-op on macOS. Accepted for API symmetry with the Linux and Windows
+   * drivers, but `caffeinate(1)` exposes no equivalent of an identity string,
+   * so this value is ignored and never surfaced to the OS. (On Linux it becomes
+   * `systemd-inhibit --who=` / the sysfs cookie; on Windows it tags the
+   * assertion.)
    */
   identity?: string;
   /** Invoked when the caffeinate child dies unexpectedly. */
@@ -52,14 +55,14 @@ export class MacOSWakeLockDriver implements WakeLockDriver {
 
   private readonly _caffeinatePath: string;
   private readonly _logger: WakeLockLogger | undefined;
-  private readonly _onPrimitiveDied: (() => void) | undefined;
+  private readonly _diedCallbacks: (() => void)[] = [];
   private _child: ChildProcess | null = null;
   private _currentArgs: string[] | null = null;
   private _restarts = 0;
 
   constructor(opts: MacOSWakeLockDriverOptions = {}) {
     this._logger = opts.logger;
-    this._onPrimitiveDied = opts.onPrimitiveDied;
+    if (opts.onPrimitiveDied) this._diedCallbacks.push(opts.onPrimitiveDied);
 
     const probe = probeCaffeinate(opts.caffeinatePath);
     this._caffeinatePath = probe.path;
@@ -81,6 +84,20 @@ export class MacOSWakeLockDriver implements WakeLockDriver {
 
   get restarts(): number {
     return this._restarts;
+  }
+
+  onPrimitiveDied(cb: () => void): void {
+    this._diedCallbacks.push(cb);
+  }
+
+  private _emitPrimitiveDied(): void {
+    for (const cb of this._diedCallbacks) {
+      try {
+        cb();
+      } catch {
+        // A misbehaving death callback must never break the driver.
+      }
+    }
   }
 
   async setState(state: WakeLockState, description: string): Promise<void> {
@@ -141,7 +158,7 @@ export class MacOSWakeLockDriver implements WakeLockDriver {
           { code, signal },
           "caffeinate exited unexpectedly — sleep inhibitor dropped, will re-engage on next change",
         );
-        this._onPrimitiveDied?.();
+        this._emitPrimitiveDied();
       }
       clearIfCurrent();
     });

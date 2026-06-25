@@ -105,6 +105,11 @@ Events: `engaged`, `disengaged`, `reasonsChanged`, `primitiveDied`, `degraded`.
 At the OS level you can also see the assertion directly — `pmset -g assertions`
 on macOS, or `systemd-inhibit --list` (look for your `identity`) on Linux.
 
+The `identity` you pass to `createWakeLock` surfaces the assertion's owner on
+Linux (`systemd-inhibit --who=`, or the sysfs wake-lock cookie) and tags it on
+Windows, but has no effect on macOS — `caffeinate(1)` exposes no equivalent, so
+the value is silently ignored there.
+
 ## Testing
 
 A deterministic in-memory driver lives at `pervigil/testing` so it never ships
