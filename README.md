@@ -16,8 +16,10 @@ machine awake while long jobs run.
   with no build toolchain.
 - **Two independent axes** — block *system* sleep and *display* sleep
   separately.
-- **Graceful no-op** — in containers, on unsupported platforms, or when the OS
-  primitive is missing, it degrades to a single warning instead of throwing.
+- **Fail-safe by default** — in containers, on unsupported platforms, or when
+  the OS primitive is missing, it degrades to a silent no-op instead of
+  throwing, so your job always runs. Opt into **fail-fast** with `strict`, or
+  read `.active` for the truth.
 - **Supervised** — if the OS primitive dies, it re-engages on the next change.
 - **Observable** — a `status()` snapshot plus counters and events answer *"is the
   host awake, why, on what backend, and for how long?"*
@@ -115,6 +117,60 @@ const stop = releaseOnExit(wl); // wl.shutdown() runs on exit / Ctrl-C
 stop();
 ```
 
+## Behaviour: fail-safe by default
+
+pervigil is **fail-safe**: by default it **never throws**. When it can't keep the
+host awake it degrades to a silent no-op and your job still runs. It no-ops when:
+
+- running inside a container (`/.dockerenv`, the `container` env var, or
+  `/run/.containerenv`);
+- on a platform with no inhibitor backend (e.g. FreeBSD), or when the platform
+  binary (`caffeinate` / `systemd-inhibit` / PowerShell) is missing;
+- forced off via `PERVIGIL_FORCE_NOOP=1` or `forceNoop: true`.
+
+The catch: **"I called `keepAwake`" is not the same as "the host is awake."**
+Three status fields separate the three questions:
+
+| Field | Question |
+| --- | --- |
+| `available` | Is the driver *capable* of a real primitive? (`false` ⇒ no-op) |
+| `engaged` | Is a reason *desired* on this axis? (intent) |
+| `active` | Is a real OS assertion in effect **right now**? (reality) |
+
+`active` is the truth — it's `false` when degraded, when nothing is held, **or**
+when the OS primitive died and hasn't re-engaged yet, cases that `available` and
+`engaged` can't distinguish.
+
+**Stay fail-safe, but check `.active`:**
+
+```ts
+const lock = await keepAwake({ description: "backup" });
+if (!lock.status().active) {
+  log.warn("running without a wake lock — host may sleep");
+}
+```
+
+**Or opt into fail-fast with `strict`** — when the job must not run unless the
+host is genuinely kept awake, pervigil throws `WakeLockUnavailableError` instead
+of no-op'ing:
+
+```ts
+import { keepAwake, WakeLockUnavailableError } from "pervigil";
+
+try {
+  await keepAwake({ description: "backup", strict: true });
+} catch (err) {
+  if (err instanceof WakeLockUnavailableError) {
+    console.error(`can't keep awake: ${err.degradedReason} on ${err.platform}`);
+    process.exit(1);
+  }
+}
+```
+
+`strict` is opt-in; the default stays a graceful, never-throwing no-op. For
+long-running locks, watch the `degraded` / `primitiveDied` events (or `onEvent`)
+to learn when `active` flips to `false`.
+
 ## Supervised, multi-reason controller
 
 For daemons that hold several overlapping reasons, use `wakeLock`. It
@@ -177,50 +233,6 @@ The `identity` you pass to `wakeLock` surfaces the assertion's owner on
 Linux (`systemd-inhibit --who=`, or the sysfs wake-lock cookie) and tags it on
 Windows, but has no effect on macOS — `caffeinate(1)` exposes no equivalent, so
 the value is silently ignored there.
-
-## Is the host actually being kept awake?
-
-Because pervigil degrades to a silent no-op where it can't help, "I called
-`keepAwake`" is **not** the same as "the host is awake." Three status fields
-separate the three questions:
-
-| Field | Question |
-| --- | --- |
-| `available` | Is the driver *capable* of a real primitive? (false ⇒ no-op) |
-| `engaged` | Is a reason *desired* on this axis? (intent) |
-| `active` | Is a real OS assertion in effect **right now**? (reality) |
-
-`active` is the truth: it's `false` when degraded, when nothing is held, **and**
-when the OS primitive died and hasn't re-engaged yet — cases `available` and
-`engaged` can't distinguish.
-
-```ts
-const lock = await keepAwake({ description: "backup" });
-if (!lock.status().active) {
-  log.warn("running without a wake lock — host may sleep");
-}
-```
-
-**Or fail loud.** If your job genuinely must not run unless the host stays awake,
-pass `strict: true` and pervigil throws `WakeLockUnavailableError` instead of
-no-op'ing:
-
-```ts
-import { keepAwake, WakeLockUnavailableError } from "pervigil";
-
-try {
-  await keepAwake({ description: "backup", strict: true });
-} catch (err) {
-  if (err instanceof WakeLockUnavailableError) {
-    console.error(`can't keep awake: ${err.degradedReason} on ${err.platform}`);
-    process.exit(1);
-  }
-}
-```
-
-`strict` is opt-in — the default stays a graceful, never-throwing no-op. For
-long-running locks, watch the `degraded` / `primitiveDied` events (or `onEvent`)
-to learn when `active` flips to `false`.
 
 ## Metrics
 
@@ -287,20 +299,6 @@ const wl = wakeLock({ driver });
 await wl.acquire("job", { system: true });
 expect(driver.engageTransitions).toBe(1);
 ```
-
-## Behaviour when unsupported
-
-`detectDriver()` returns a no-op driver — and `available` / `degradedReason`
-report why — in these cases:
-
-- inside a container (`/.dockerenv`, `container` env, `/run/.containerenv`);
-- on a platform with no inhibitor backend (e.g. FreeBSD);
-- when the platform binary (`caffeinate` / `systemd-inhibit` / PowerShell) is
-  absent.
-
-Set `PERVIGIL_FORCE_NOOP=1` (or `forceNoop: true`) to force it. In every case the
-job still runs — it just isn't kept awake — and, **if you've enabled logging**
-(see below), you get exactly one warning explaining why.
 
 ## Logging
 
