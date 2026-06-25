@@ -67,4 +67,21 @@ describe("releaseOnExit", () => {
 
     expect(target.shutdown).toHaveBeenCalledTimes(1);
   });
+
+  it("releases then drops its own listeners on a signal (so the re-raise hits the default)", async () => {
+    const emitter = new EventEmitter();
+    const target = { shutdown: vi.fn().mockResolvedValue(undefined) };
+
+    releaseOnExit(target, { emitter, signals: ["SIGTERM"] });
+    expect(emitter.listenerCount("SIGTERM")).toBe(1);
+
+    emitter.emit("SIGTERM");
+    // unregister + re-raise run in the shutdown promise's `.finally` microtask.
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(target.shutdown).toHaveBeenCalledTimes(1);
+    expect(emitter.listenerCount("SIGTERM")).toBe(0); // cleaned up before re-raise
+    // emitter !== process, so no signal was sent to the test runner.
+  });
 });
