@@ -211,6 +211,73 @@ wl.release("job:123"); // system axis releases; display stays held
 await wl.shutdown(); // release everything, tear down the primitive
 ```
 
+If you already recompute the desired set each tick, `apply` replaces the
+**entire** held set in one reconcile (the declarative, batch sibling of
+`acquire`/`release` — same per-axis defaults, idempotent, one OS flush):
+
+```ts
+wl.apply([
+  { key: "job:123", system: true, description: "import job 123" },
+  { key: "view:abc", display: true, description: "live view abc" },
+]);
+// any previously-held key absent from this set is released, in a single flush
+```
+
+## Self-managing locks (supervisor)
+
+`pervigil/supervisor` is a **declarative** layer over `wakeLock`: declare a
+condition and forget it. Each lock states its impact (axes), an optional
+`active` predicate ("should it hold right now?"), and optional eviction triggers
+(`until` / `maxAge` / `stale`). The supervisor polls these, reconciles the
+underlying wake lock, and reaps dead locks — so you never manually
+`acquire`/`release` or track lifetimes:
+
+```ts
+import { supervise } from "pervigil/supervisor";
+
+const sup = supervise({ identity: "my-app", poll: "auto" });
+
+// conditional / standing — held while any download is running
+sup.add({ key: "downloads", description: "Active downloads", active: () => downloads.size > 0 });
+
+// scoped / one-time — held for one operation, auto-evicted when it settles
+sup.add({ description: "Importing dataset", until: importDataset() });
+
+// also keep the display awake while a preview is on screen
+sup.add({
+  key: "preview",
+  axes: ["system", "display"],
+  description: "Live preview",
+  active: () => preview.visible,
+});
+
+// pinned override — held until you remove it
+const override = sup.add({ axes: ["system", "display"], description: "Presentation mode" });
+
+// granular control + introspection
+sup.list().forEach((l) => console.log(l.key, l.state)); // holding | idle | unknown | paused | evicted
+sup.get("downloads")?.pause();
+sup.restrict("display"); // veto an axis — never engage the display, whatever the locks say
+override.remove();
+await sup.shutdown();
+```
+
+Lock shapes:
+
+- **Conditional / standing** — `{ active }` auto-engages/disengages; lives until removed.
+- **Scoped / one-time** — `{ until }` (a promise or a predicate) held until it settles, then evicted.
+- **Pinned** — neither; held while registered.
+
+The state machine is surfaced on every handle (`holding`, `idle`, `unknown`,
+`paused`, `evicted`). If an `active` predicate **throws**, the lock is engaged
+**defensively** (`unknown`, _fail-awake_) so the host can recover, and the
+`stale` clock starts — keep erroring for `stale` ms (5 min by default) and the
+lock is evicted; any successful evaluation resets it. `maxAge` is an opt-in hard
+ceiling from registration. `poll` is `number` (ms), `"auto"` (60s, and **no
+timer at all** when no lock needs polling — all pinned / promise-`until`), or
+`() => number`; the timer is always `unref()`'d, so it never keeps the process
+alive. `refresh()` forces an immediate re-reconcile.
+
 ## Observability
 
 ```ts

@@ -10,6 +10,7 @@ export type { AutoReleaseOptions } from "./auto-release.js";
 export { wakeLock } from "./controller.js";
 export type {
   AcquireOptions,
+  ReasonSpec,
   WakeLockOptions,
   WakeLock,
   WakeLockEvent,
