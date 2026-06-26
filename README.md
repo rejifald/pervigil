@@ -151,8 +151,9 @@ host awake it degrades to a silent no-op and your job still runs. It no-ops when
   binary (`caffeinate` / `systemd-inhibit` / PowerShell) is missing;
 - forced off via `PERVIGIL_FORCE_NOOP=1` or `forceNoop: true`.
 
-The catch: **"I called `keepAwake`" is not the same as "the host is awake."**
-Three status fields separate the three questions:
+The catch: because pervigil can silently no-op, **asking to keep the host awake
+is not the same as the host actually staying awake.** Three status fields keep
+those apart, each answering a distinct question:
 
 | Field       | Question                                                       |
 | ----------- | -------------------------------------------------------------- |
@@ -433,6 +434,20 @@ const wl = wakeLock({
 A `LogRecord` is `{ level: "warn" | "info" | "debug"; msg?: string; fields: object }`.
 
 `logLevel: "silent"` hard-mutes either kind of supplied logger.
+
+## Security
+
+pervigil has **zero runtime dependencies** and ships **no native addons** — it
+only spawns the OS's own inhibitor (`caffeinate` / `systemd-inhibit` /
+PowerShell), so the supply-chain surface is minimal. Releases from `v0.5.0`
+onward are published from CI via npm Trusted Publishing (OIDC) with build
+provenance, so you can verify a downloaded copy:
+
+```sh
+npm audit signatures
+```
+
+Found a vulnerability? Please report it privately — see [SECURITY.md](SECURITY.md).
 
 ## License
 
