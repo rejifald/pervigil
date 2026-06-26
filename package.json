@@ -121,5 +121,10 @@
   "publishConfig": {
     "access": "public"
   },
+  "pnpm": {
+    "overrides": {
+      "esbuild": "^0.28.1"
+    }
+  },
   "packageManager": "pnpm@10.33.2"
 }
