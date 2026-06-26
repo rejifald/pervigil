@@ -6,6 +6,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-26
+
+### Added
+
+- **`pervigil/supervisor` — declarative, self-managing locks.** A new opt-in
+  subpath layered over `wakeLock`: declare a condition and forget it. Each lock
+  states its impact (`axes`), an optional `active` predicate ("should it hold
+  right now?"), and optional eviction triggers (`until` / `maxAge` / `stale`).
+  The supervisor polls, reconciles the underlying wake lock, and reaps dead
+  locks — no manual `acquire`/`release` or lifetime tracking. Supports
+  conditional/standing, scoped/one-time (`until`), and pinned lock shapes; a
+  five-state machine (`holding` / `idle` / `unknown` / `paused` / `evicted`)
+  surfaced on each handle; **fail-awake** semantics (a throwing `active` engages
+  defensively as `unknown` and runs a `stale` clock, default 5 min); axis
+  restrictions (`restrict` / `allow`) that veto an axis regardless of locks; and
+  `poll` as `number` | `"auto"` (60s, skipped entirely when nothing needs
+  polling) | `() => number`, always `unref()`'d. New exports `supervise`,
+  `Supervisor`, `SupervisedLock`, `LockHandle`, `LockState`, `RestrictionHandle`,
+  `SupervisorOptions`.
+- **`WakeLock.apply(reasons)` — declarative bulk reconcile.** The batch sibling
+  of `acquire`/`release`: replace the entire held reason set in a single flush
+  (both axes, idempotent), holding every key in the new set with `acquire`'s
+  per-axis defaults and releasing every key absent from it. Powers the
+  supervisor and is handy whenever you recompute desired state each tick. New
+  exported type `ReasonSpec`.
+
 ## [0.5.0] - 2026-06-25
 
 ### Added

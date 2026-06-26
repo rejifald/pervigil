@@ -1,6 +1,6 @@
 {
   "name": "pervigil",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Cross-platform keep-awake / prevent-sleep utility for Node — inhibits host & display sleep (caffeinate / systemd-inhibit / SetThreadExecutionState). Zero dependencies, no native addons.",
   "keywords": [
     "keep-awake",
@@ -55,6 +55,16 @@
         "default": "./dist/metrics.cjs"
       }
     },
+    "./supervisor": {
+      "import": {
+        "types": "./dist/supervisor.d.ts",
+        "default": "./dist/supervisor.js"
+      },
+      "require": {
+        "types": "./dist/supervisor.d.cts",
+        "default": "./dist/supervisor.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "main": "./dist/index.cjs",
@@ -67,6 +77,9 @@
       ],
       "metrics": [
         "./dist/metrics.d.ts"
+      ],
+      "supervisor": [
+        "./dist/supervisor.d.ts"
       ]
     }
   },

@@ -239,6 +239,96 @@ describe("wakeLock", () => {
     expect(wl.status().counters.primitiveRestarts).toBe(1);
   });
 
+  describe("apply (declarative bulk reconcile)", () => {
+    it("holds every key in the new set with its per-axis defaults", async () => {
+      const wl = wakeLock({ driver });
+      await wl.apply([
+        { key: "a", system: true },
+        { key: "b", display: true },
+        { key: "c" }, // neither axis specified ⇒ system only, like acquire
+      ]);
+
+      const s = wl.status();
+      expect(s.reasons.system.map((r) => r.key).sort()).toEqual(["a", "c"]);
+      expect(s.reasons.display.map((r) => r.key).sort()).toEqual(["b"]);
+      expect(s.engaged).toEqual({ system: true, display: true });
+    });
+
+    it("a both-axes apply from idle makes exactly one driver setState", async () => {
+      const wl = wakeLock({ driver });
+      await wl.apply([
+        { key: "a", system: true },
+        { key: "b", display: true },
+      ]);
+
+      expect(driver.setStateCalls).toHaveLength(1);
+      expect(driver.setStateCalls[0]!.state).toEqual({ system: true, display: true });
+      // The buggy per-key reconcile would pass through {system:true, display:false}.
+      expect(
+        driver.setStateCalls.some((c) => c.state.system === true && c.state.display === false),
+      ).toBe(false);
+    });
+
+    it("releases keys not present in the new set", async () => {
+      const wl = wakeLock({ driver });
+      await wl.acquire("old", { system: true });
+      await wl.apply([{ key: "new", system: true }]);
+
+      const s = wl.status();
+      expect(s.reasons.system.map((r) => r.key)).toEqual(["new"]);
+    });
+
+    it("an empty set releases everything", async () => {
+      const wl = wakeLock({ driver });
+      await wl.acquire("a", { system: true, display: true });
+      await wl.apply([]);
+      expect(wl.status().engaged).toEqual({ system: false, display: false });
+    });
+
+    it("is idempotent — applying the same set twice does not churn the driver", async () => {
+      const wl = wakeLock({ driver });
+      const set = [
+        { key: "a", system: true },
+        { key: "b", display: true },
+      ];
+      await wl.apply(set);
+      const callsAfterFirst = driver.setStateCalls.length;
+      await wl.apply(set);
+      expect(driver.setStateCalls.length).toBe(callsAfterFirst);
+    });
+
+    it("uses the description like acquire (falls back to the key)", async () => {
+      const wl = wakeLock({ driver });
+      await wl.apply([
+        { key: "a", system: true, description: "import" },
+        { key: "b", system: true },
+      ]);
+      const s = wl.status();
+      const byKey = new Map(s.reasons.system.map((r) => [r.key, r.description]));
+      expect(byKey.get("a")).toBe("import");
+      expect(byKey.get("b")).toBe("b");
+    });
+
+    it("emits reasonsChanged once for an apply", async () => {
+      const wl = wakeLock({ driver });
+      const events: string[] = [];
+      wl.on("reasonsChanged", () => events.push("reasonsChanged"));
+      await wl.apply([{ key: "a", system: true }]);
+      expect(events).toEqual(["reasonsChanged"]);
+    });
+
+    it("is serialized with acquire/release", async () => {
+      const delayed = new DelayedDriver();
+      const wl = wakeLock({ driver: delayed });
+      const ops = [wl.acquire("x", { system: true }), wl.apply([{ key: "y", display: true }])];
+      await Promise.all(ops);
+      // apply replaces the whole set, so only "y" (display) survives.
+      expect(wl.status().reasons.system.map((r) => r.key)).toEqual([]);
+      expect(wl.status().reasons.display.map((r) => r.key)).toEqual(["y"]);
+      expect(delayed.maxConcurrentSetState).toBe(1);
+    });
+  });
+
   describe("onEvent telemetry hook", () => {
     it("fires for every lifecycle event with (event, status)", async () => {
       const events: { event: string; engaged: WakeLockState }[] = [];

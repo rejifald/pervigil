@@ -13,6 +13,13 @@ import type {
   WakeReason,
 } from "./types.js";
 
+/**
+ * A single declared reason for {@link WakeLock.apply}: an {@link AcquireOptions}
+ * plus the `key` that identifies it. Building a `ReasonSpec[]` and calling
+ * `apply` replaces the entire held set in one reconcile.
+ */
+export type ReasonSpec = { key: string } & AcquireOptions;
+
 /** Per-call axis selection + human description. */
 export interface AcquireOptions {
   /** Block system sleep. Defaults to `true` only when neither axis is given. */
@@ -68,6 +75,14 @@ export interface WakeLock {
   acquire(key: string, opts?: AcquireOptions): Promise<void>;
   /** Remove a reason by `key`. No-op if the key is not held. */
   release(key: string): Promise<void>;
+  /**
+   * Replace the ENTIRE held reason set in a single reconcile (one flush, both
+   * axes). Holds every key in `reasons` with its `{system, display}` — the same
+   * per-axis defaults as {@link WakeLock.acquire} — and releases every currently
+   * held key absent from `reasons`. Idempotent: applying the same set twice is a
+   * no-op at the driver. The declarative, batch sibling of `acquire`/`release`.
+   */
+  apply(reasons: readonly ReasonSpec[]): Promise<void>;
   /** Current + cumulative observability snapshot. */
   status(): WakeLockStatus;
   /** Subscribe to an event; returns an unsubscribe function. */
@@ -238,6 +253,19 @@ export function wakeLock(opts: WakeLockOptions = {}): WakeLock {
     }
   }
 
+  // Build a Hold from a key + per-call options, matching `acquire`'s per-axis
+  // defaults: system defaults on only when neither axis is specified; an
+  // explicitly-set axis must not drag the other to its default. Shared by
+  // `acquire` and `apply` so both stay in lockstep.
+  function holdFor(key: string, o: AcquireOptions): Hold {
+    const specified = o.system !== undefined || o.display !== undefined;
+    return {
+      system: o.system ?? !specified,
+      display: o.display ?? false,
+      reason: { key, description: o.description ?? key },
+    };
+  }
+
   function reasonsFor(axis: WakeAxis): WakeReason[] {
     const out: WakeReason[] = [];
     for (const h of holds.values()) {
@@ -305,14 +333,7 @@ export function wakeLock(opts: WakeLockOptions = {}): WakeLock {
         if (opts.strict && !driver.available) {
           throw new WakeLockUnavailableError(driver.degradedReason ?? null, driver.platform);
         }
-        // Default to the system axis only when neither axis is specified; an
-        // explicitly-set axis must not drag the other to its default.
-        const specified = o.system !== undefined || o.display !== undefined;
-        holds.set(key, {
-          system: o.system ?? !specified,
-          display: o.display ?? false,
-          reason: { key, description: o.description ?? key },
-        });
+        holds.set(key, holdFor(key, o));
         await reconcile();
         emit("reasonsChanged");
       });
@@ -320,6 +341,24 @@ export function wakeLock(opts: WakeLockOptions = {}): WakeLock {
     release(key) {
       return enqueue(async () => {
         if (!holds.delete(key)) return;
+        await reconcile();
+        emit("reasonsChanged");
+      });
+    },
+    apply(reasons) {
+      return enqueue(async () => {
+        // Strict mode: refuse to pretend, exactly like `acquire`. Don't mutate
+        // the held set, since the new reasons would never take effect.
+        if (opts.strict && !driver.available) {
+          throw new WakeLockUnavailableError(driver.degradedReason ?? null, driver.platform);
+        }
+        // Replace the entire held set, then drive a SINGLE both-axes reconcile —
+        // the same batched flush `acquire`/`release` use, so a multi-key change
+        // never churns the OS primitive. Last spec wins on a duplicate key.
+        holds.clear();
+        for (const { key, ...o } of reasons) {
+          holds.set(key, holdFor(key, o));
+        }
         await reconcile();
         emit("reasonsChanged");
       });
